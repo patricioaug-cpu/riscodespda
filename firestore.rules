@@ -1,0 +1,84 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: users
+    // Fields: uid, email, displayName, role, status, trialStartDate, createdAt
+    //
+    // Collection: reports
+    // Fields: uid, userId, client, address, observations, inputs, results, createdAt
+    //
+    // Collection: loginHistory
+    // Fields: userId, email, displayName, timestamp
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (request.auth.token.email == "patricioaug@gmail.com" ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role', 'status', 'trialStartDate']) &&
+             data.uid is string &&
+             data.email is string &&
+             data.role in ['user', 'admin'] &&
+             data.status in ['trial', 'liberado', 'bloqueado', 'pendente'] &&
+             data.uid.size() < 128 &&
+             data.email.size() < 256;
+    }
+
+    function isValidReport(data) {
+      return data.keys().hasAll(['uid', 'userId', 'client', 'address', 'inputs', 'results', 'createdAt']) &&
+             data.userId is string &&
+             data.client is string &&
+             data.address is string &&
+             data.client.size() < 256 &&
+             data.address.size() < 512;
+    }
+
+    function isValidLoginHistory(data) {
+      return data.keys().hasAll(['userId', 'email', 'timestamp']) &&
+             data.userId is string &&
+             data.email is string &&
+             data.email.size() < 256;
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role && request.resource.data.status == resource.data.status));
+    }
+
+    match /reports/{reportId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidReport(request.resource.data) && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && isValidReport(request.resource.data) && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    match /loginHistory/{historyId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated() && isValidLoginHistory(request.resource.data) && request.resource.data.userId == request.auth.uid;
+    }
+  }
+}

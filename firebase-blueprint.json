@@ -1,0 +1,61 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile with trial and role information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "status": { "type": "string", "enum": ["trial", "liberado", "bloqueado"] },
+        "trialStartDate": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role", "status", "trialStartDate"]
+    },
+    "Report": {
+      "title": "SPDA Report",
+      "description": "SPDA risk calculation report",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "userId": { "type": "string" },
+        "client": { "type": "string" },
+        "address": { "type": "string" },
+        "observations": { "type": "string" },
+        "inputs": { "type": "object" },
+        "results": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "userId", "client", "address", "inputs", "results", "createdAt"]
+    },
+    "LoginHistory": {
+      "title": "Login History",
+      "description": "Tracking user logins",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "email", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/reports/{reportId}": {
+      "schema": "Report",
+      "description": "SPDA reports"
+    },
+    "/loginHistory/{historyId}": {
+      "schema": "LoginHistory",
+      "description": "Login history for admin"
+    }
+  }
+}
