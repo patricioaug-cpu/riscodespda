@@ -1,5 +1,5 @@
 {
-  "name": "RiscoPro Gerenciamento de Risco para SPDA",
-  "description": "Gerenciamento de Risco de SPDA conforme ABNT NBR 5419-2:2015. Avaliação de riscos R1 a R4, cálculo de componentes RA a RZ e geração de relatórios técnicos PDF.",
-  "requestFramePermissions": []
+  "name": "RiscoPro 2026 - Gerenciamento de Risco SPDA",
+  "description": "Gerenciamento de Risco de SPDA conforme ABNT NBR 5419-2:2026. Avaliação de riscos R1 a R4, cálculo de componentes RA a RZ, mapa interativo de Ng e geração de relatórios técnicos PDF.",
+  "requestFramePermissions": ["geolocation"]
 }

@@ -88,12 +88,12 @@ export function calculateSPDARisk(inputs: SPDAInputs): SPDAResults {
 
   // Fator h_z (Perigo especial)
   let hz = 1.0;
-  if (['Hospitalar', 'Escolar', 'Teatro/Cinema'].includes(tipoAtividade)) hz = 2.0;
+  if (['Hospitalar', 'Escolar', 'Teatro/Cinema', 'Museu', 'Local de Reunião'].includes(tipoAtividade)) hz = 2.0;
 
   // Perdas Típicas
   const LT = 1e-4; // Choque
-  const LF = (['Hospitalar', 'Escolar', 'Industrial'].includes(tipoAtividade)) ? 1e-1 : 1e-2; // Fogo
-  const LO = (['Hospitalar', 'Escolar'].includes(tipoAtividade)) ? 1e-1 : 1e-2; // Sistemas
+  const LF = (['Hospitalar', 'Escolar', 'Industrial', 'Teatro/Cinema', 'Museu'].includes(tipoAtividade)) ? 1e-1 : 1e-2; // Fogo
+  const LO = (['Hospitalar', 'Escolar', 'Teatro/Cinema', 'Museu'].includes(tipoAtividade)) ? 1e-1 : 1e-2; // Sistemas
 
   const LA = rt * LT;
   const LB = rp * rf * hz * LF;

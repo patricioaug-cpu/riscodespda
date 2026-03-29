@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged, 
   sendPasswordResetEmail, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile,
@@ -12,9 +13,11 @@ import autoTable from 'jspdf-autotable';
 import { 
   LayoutDashboard, FileText, PlusCircle, LogOut, ShieldCheck, 
   HelpCircle, AlertTriangle, CheckCircle, ChevronRight, User, 
-  Settings, Trash2, Download, Info, RotateCcw
+  Settings, Trash2, Download, Info, RotateCcw, Loader2
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
+import NgMap from './components/NgMap';
+import { MapPin } from 'lucide-react';
 
 // --- Components ---
 
@@ -103,9 +106,9 @@ const Login = () => {
           <div className="w-16 h-16 bg-emerald-600 rounded-full flex items-center justify-center text-white mx-auto mb-4">
             <ShieldCheck size={32} />
           </div>
-          <h1 className="text-3xl font-bold text-zinc-900">RiscoPro</h1>
+          <h1 className="text-3xl font-bold text-zinc-900">RiscoPro 2026</h1>
           <p className="text-zinc-500">
-            Gerenciamento de Risco para SPDA
+            Gerenciamento de Risco SPDA (NBR 5419-2:2026)
           </p>
         </div>
 
@@ -272,7 +275,7 @@ const Dashboard = ({ user, onNewReport, onEditReport, onViewReport, reports, set
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">Meus Relatórios</h1>
-          <p className="text-zinc-500">Gerencie seus cálculos de risco de SPDA</p>
+          <p className="text-zinc-500 text-sm">Gerenciamento de Risco SPDA (NBR 5419-2:2026)</p>
         </div>
         <button 
           onClick={onNewReport}
@@ -346,6 +349,10 @@ const Dashboard = ({ user, onNewReport, onEditReport, onViewReport, reports, set
 
 const CalculationForm = ({ report, onSave, onCancel }: any) => {
   const [step, setStep] = useState(1);
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [calcStatus, setCalcStatus] = useState('');
+  const [calcProgress, setCalcProgress] = useState(0);
+  const [showNgMap, setShowNgMap] = useState(false);
   const [formData, setFormData] = useState<SPDAInputs>(() => {
     const base = report?.inputs || {
       cliente: '',
@@ -401,7 +408,25 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
     }));
   };
 
-  const handleCalculate = () => {
+  const handleCalculate = async () => {
+    setIsCalculating(true);
+    
+    const statuses = [
+      'Analisando dimensões da estrutura...',
+      'Calculando áreas de exposição (Ae, Ad, Al, Ai)...',
+      'Estimando frequência de descargas (Nd, Nm, Nl, Ni)...',
+      'Avaliando probabilidades de danos (PA, PB, PC, PM)...',
+      'Processando fatores de perda (L1, L2, L3, L4)...',
+      'Consolidando riscos R1, R2, R3 e R4...',
+      'Finalizando relatório técnico...'
+    ];
+
+    for (let i = 0; i < statuses.length; i++) {
+      setCalcStatus(statuses[i]);
+      setCalcProgress(((i + 1) / statuses.length) * 100);
+      await new Promise(resolve => setTimeout(resolve, 600));
+    }
+
     const results = calculateSPDARisk(formData);
     onSave({
       uid: report?.uid || Math.random().toString(36).substr(2, 9),
@@ -412,6 +437,7 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
       results,
       createdAt: report?.createdAt || new Date().toISOString()
     });
+    setIsCalculating(false);
   };
 
   const steps = [
@@ -424,7 +450,51 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <div className="bg-white rounded-2xl shadow-sm border border-zinc-100 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-sm border border-zinc-100 overflow-hidden relative">
+        {/* Loading Overlay */}
+        <AnimatePresence>
+          {isCalculating && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-50 bg-white/95 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center"
+            >
+              <motion.div 
+                animate={{ 
+                  scale: [1, 1.1, 1],
+                  rotate: [0, 5, -5, 0]
+                }}
+                transition={{ 
+                  duration: 2,
+                  repeat: Infinity,
+                  ease: "easeInOut"
+                }}
+                className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-8 shadow-inner"
+              >
+                <ShieldCheck className="text-emerald-600" size={40} />
+              </motion.div>
+              
+              <h3 className="text-2xl font-bold text-zinc-900 mb-3 tracking-tight">Processando Análise de Risco</h3>
+              <p className="text-zinc-500 text-sm mb-10 max-w-xs font-medium leading-relaxed">{calcStatus}</p>
+              
+              <div className="w-full max-w-sm bg-zinc-100 h-2.5 rounded-full overflow-hidden mb-6 shadow-sm">
+                <motion.div 
+                  className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${calcProgress}%` }}
+                  transition={{ duration: 0.4 }}
+                />
+              </div>
+              
+              <div className="flex items-center gap-3 text-emerald-600 font-mono text-xs font-bold bg-emerald-50 px-4 py-2 rounded-full border border-emerald-100">
+                <Loader2 className="animate-spin" size={16} />
+                {Math.round(calcProgress)}% CONCLUÍDO
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Stepper */}
         <div className="bg-zinc-50 border-b border-zinc-100 p-4 flex justify-between">
           {steps.map((s) => (
@@ -437,6 +507,17 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
             </div>
           ))}
         </div>
+
+        {showNgMap && (
+          <NgMap 
+            initialNg={formData.ng}
+            onClose={() => setShowNgMap(false)}
+            onSelect={(val) => {
+              setFormData(prev => ({ ...prev, ng: val }));
+              setShowNgMap(false);
+            }}
+          />
+        )}
 
         <div className="p-8">
           {step === 1 && (
@@ -560,9 +641,23 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
               <div className="bg-zinc-50 p-4 rounded-xl border border-zinc-100 mb-6">
                 <p className="text-xs text-zinc-500 mb-2">Dica: Obtenha o valor de Ng no mapa de densidade de descargas da NBR 5419.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-700 mb-1">Ng (descargas/km²/ano)</label>
-                    <input type="number" name="ng" value={formData.ng} onChange={handleChange} className="w-full p-2 border border-zinc-200 rounded-lg" />
+                  <div className="flex flex-col gap-2">
+                    <label className="block text-sm font-medium text-zinc-700">Ng (descargas/km²/ano)</label>
+                    <input 
+                      type="number" 
+                      name="ng" 
+                      value={formData.ng} 
+                      onChange={handleChange} 
+                      className="w-full p-2 border border-zinc-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none" 
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setShowNgMap(true)}
+                      className="p-2 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-lg hover:bg-emerald-100 transition-colors flex items-center justify-center gap-2 text-xs font-bold w-full"
+                    >
+                      <MapPin size={14} />
+                      Consultar Mapa Interativo
+                    </button>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-zinc-700 mb-1">Fator de Localização (Cd)</label>
@@ -629,6 +724,9 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
                   <option>Industrial</option>
                   <option>Hospitalar</option>
                   <option>Escolar</option>
+                  <option>Teatro/Cinema</option>
+                  <option>Museu</option>
+                  <option>Local de Reunião</option>
                 </select>
               </div>
               <div className="mt-4">
@@ -969,10 +1067,30 @@ const ReportView = ({ report, onBack }: any) => {
       headStyles: { fillColor: [5, 150, 105] } // emerald-600
     });
 
+    // Detailed Components
+    const lastY3 = (doc as any).lastAutoTable.finalY;
+    doc.text('4. Detalhamento dos Componentes de Risco', 20, lastY3 + 10);
+    autoTable(doc, {
+      startY: lastY3 + 15,
+      head: [['Componente', 'Descrição', 'Valor']],
+      body: [
+        ['RA', 'Risco de choque em seres vivos (descarga direta na estrutura)', results.componentes.RA.toExponential(3)],
+        ['RB', 'Risco de danos físicos (descarga direta na estrutura)', results.componentes.RB.toExponential(3)],
+        ['RC', 'Risco de falha de sistemas internos (descarga direta na estrutura)', results.componentes.RC.toExponential(3)],
+        ['RM', 'Risco de falha de sistemas internos (descarga próxima à estrutura)', results.componentes.RM.toExponential(3)],
+        ['RU', 'Risco de choque em seres vivos (descarga direta na linha)', results.componentes.RU.toExponential(3)],
+        ['RV', 'Risco de danos físicos (descarga direta na linha)', results.componentes.RV.toExponential(3)],
+        ['RW', 'Risco de falha de sistemas internos (descarga direta na linha)', results.componentes.RW.toExponential(3)],
+        ['RZ', 'Risco de falha de sistemas internos (descarga próxima à linha)', results.componentes.RZ.toExponential(3)]
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: [40, 40, 40] }
+    });
+
     // Conclusion
     const finalY = (doc as any).lastAutoTable.finalY + 15;
     doc.setFontSize(14);
-    doc.text('4. Conclusão Técnica', 20, finalY);
+    doc.text('5. Conclusão Técnica', 20, finalY);
     doc.setFontSize(11);
     const conclusion = results.aceitavel.R1 
       ? 'Com base nos cálculos realizados, o risco R1 é inferior ao risco tolerável normativo. A instalação de SPDA não é obrigatória por critério de risco de vida, porém recomenda-se avaliação de danos físicos (R2).'
@@ -1002,7 +1120,7 @@ const ReportView = ({ report, onBack }: any) => {
       <div className="bg-white rounded-2xl shadow-sm border border-zinc-100 p-8 space-y-8">
         <div className="text-center border-b border-zinc-100 pb-8">
           <h1 className="text-3xl font-bold text-zinc-900 mb-2">Resultado da Análise</h1>
-          <p className="text-zinc-500">Memória de cálculo conforme NBR 5419-2:2015</p>
+          <p className="text-zinc-500">Memória de cálculo conforme NBR 5419-2:2026</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -1028,7 +1146,7 @@ const ReportView = ({ report, onBack }: any) => {
           <div className="space-y-4">
             <h3 className="font-bold text-zinc-900 flex items-center gap-2">
               <ShieldCheck size={18} className="text-emerald-600" />
-              Conclusão Normativa
+              Conclusão Normativa (NBR 5419-2:2026)
             </h3>
             <div className={`p-6 rounded-xl border-2 flex flex-col items-center justify-center text-center ${
               report.results.aceitavel.R1 ? 'bg-green-50 border-green-100 text-green-800' : 'bg-red-50 border-red-100 text-red-800'
@@ -1144,7 +1262,7 @@ const AdminDashboard = ({ onBack }: any) => {
             <CheckCircle size={18} />
             Liberar Pendentes
           </button>
-          <h1 className="text-2xl font-bold text-zinc-900">Painel Administrativo</h1>
+          <h1 className="text-2xl font-bold text-zinc-900">Painel Administrativo 2026</h1>
         </div>
       </div>
 
@@ -1244,7 +1362,7 @@ const HelpScreen = ({ onBack }: any) => {
         <section>
           <h2 className="text-xl font-bold text-zinc-900 mb-4">O que é o Gerenciamento de Risco?</h2>
           <p className="text-zinc-600 leading-relaxed mb-4">
-            O gerenciamento de risco de SPDA, fundamentado na norma ABNT NBR 5419-2:2015, é o processo técnico que avalia a necessidade de instalação de para-raios e determina o nível de proteção adequado. 
+            O gerenciamento de risco de SPDA, fundamentado na norma ABNT NBR 5419-2:2026, é o processo técnico que avalia a necessidade de instalação de para-raios e determina o nível de proteção adequado. 
             Esta análise calcula os riscos de perdas de vidas (R1), serviços (R2), patrimônio (R3) e cultural (R4), considerando características da estrutura, localização e estruturas adjacentes.
           </p>
           <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl">
@@ -1386,7 +1504,7 @@ export default function App() {
             <div className="w-8 h-8 bg-emerald-600 rounded flex items-center justify-center text-white group-hover:bg-emerald-700 transition-colors">
               <ShieldCheck size={20} />
             </div>
-            <span className="font-bold text-zinc-900 hidden sm:inline group-hover:text-emerald-600 transition-colors">RiscoPro</span>
+            <span className="font-bold text-zinc-900 hidden sm:inline group-hover:text-emerald-600 transition-colors">RiscoPro 2026</span>
           </div>
 
           <nav className="flex items-center gap-1 sm:gap-4">
@@ -1492,7 +1610,7 @@ export default function App() {
 
       <footer className="bg-white border-t border-zinc-100 p-6 text-center">
         <p className="text-xs text-zinc-400">
-          © 2026 RiscoPro Gerenciamento de Risco para SPDA | Base Normativa ABNT NBR 5419-2:2015
+          © 2026 RiscoPro Gerenciamento de Risco para SPDA | Base Normativa ABNT NBR 5419-2:2026
         </p>
       </footer>
     </div>
