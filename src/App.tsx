@@ -8,12 +8,10 @@ import {
 } from './firebase';
 import { UserProfile, SPDAReport, SPDAInputs, SPDAResults } from './types/spda';
 import { calculateSPDARisk } from './lib/spda-engine';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { 
   LayoutDashboard, FileText, PlusCircle, LogOut, ShieldCheck, 
   HelpCircle, AlertTriangle, CheckCircle, ChevronRight, User, 
-  Settings, Trash2, Download, Info, RotateCcw, Loader2
+  Settings, Trash2, Clipboard, Info, RotateCcw, Loader2
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import NgMap from './components/NgMap';
@@ -977,102 +975,59 @@ const Building3D = ({ width, length, height }: { width: number, length: number, 
 };
 
 const ReportView = ({ report, onBack }: any) => {
-  const generatePDF = () => {
-    const doc = new jsPDF();
+  const [copied, setCopied] = useState(false);
+
+  const copyToClipboard = () => {
     const { inputs, results } = report;
-
-    // Header
-    doc.setFontSize(20);
-    doc.setTextColor(5, 150, 105); // emerald-600
-    doc.text('Relatório de Gerenciamento de Risco SPDA', 105, 20, { align: 'center' });
-    
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`Norma: ABNT NBR 5419-2:2026 | Data: ${format(new Date(report.createdAt), 'dd/MM/yyyy HH:mm')}`, 105, 28, { align: 'center' });
-
-    // Client Info
-    doc.setFontSize(12);
-    doc.setTextColor(0);
-    doc.text('1. Identificação', 20, 40);
-    autoTable(doc, {
-      startY: 45,
-      head: [['Campo', 'Informação']],
-      body: [
-        ['Cliente', report.client],
-        ['Endereço', report.address],
-        ['Observações', report.observations || 'N/A']
-      ],
-      theme: 'striped',
-      headStyles: { fillColor: [40, 40, 40] }
-    });
-
-    // Inputs
-    const lastY1 = (doc as any).lastAutoTable.finalY;
-    doc.text('2. Dados da Estrutura e Localização', 20, lastY1 + 10);
-    autoTable(doc, {
-      startY: lastY1 + 15,
-      body: [
-        ['Dimensões', `${inputs.comprimento}m x ${inputs.largura}m x ${inputs.altura}m`],
-        ['Material / Cobertura', `${inputs.materialConstrucao} / ${inputs.tipoCobertura}`],
-        ['Risco Incêndio / Combate', `${inputs.riscoIncendio} / ${inputs.medidasCombateIncendio}`],
-        ['Densidade (Ng) / Cd', `${inputs.ng} desc/km²/ano / ${inputs.cd}`],
-        ['Solo / Uw', `${inputs.resitividadeSolo} Ωm / ${inputs.tensaoSuportavel} kV`],
-        ['Ocupação', `${inputs.numPessoas} pessoas (${inputs.tipoAtividade})`],
-        ['Proteção Contato', inputs.medidasProtecaoContato],
-        ['Sistemas Internos', inputs.sistemasMetalicos ? 'DPS Presente' : 'Nenhum'],
-        ['Blindagem Espacial', inputs.blindagemEspacial ? 'Sim' : 'Não']
-      ],
-      theme: 'grid'
-    });
-
-    // Results
-    const lastY2 = (doc as any).lastAutoTable.finalY;
-    doc.text('3. Resultados da Análise de Risco', 20, lastY2 + 10);
-    autoTable(doc, {
-      startY: lastY2 + 15,
-      head: [['Risco', 'Valor Calculado', 'Risco Tolerável (Rt)', 'Status']],
-      body: [
-        ['R1 - Vidas Humanas', results.R1.toExponential(3), results.Rt.R1.toExponential(3), results.aceitavel.R1 ? 'ACEITÁVEL' : 'CRÍTICO'],
-        ['R2 - Danos Físicos', results.R2.toExponential(3), results.Rt.R2.toExponential(3), results.aceitavel.R2 ? 'ACEITÁVEL' : 'CRÍTICO'],
-        ['R3 - Falhas Sistemas', results.R3.toExponential(3), results.Rt.R3.toExponential(3), results.aceitavel.R3 ? 'ACEITÁVEL' : 'CRÍTICO'],
-        ['R4 - Perda Econômica', results.R4.toExponential(3), results.Rt.R4.toExponential(3), results.aceitavel.R4 ? 'ACEITÁVEL' : 'CRÍTICO']
-      ],
-      theme: 'striped',
-      headStyles: { fillColor: [5, 150, 105] } // emerald-600
-    });
-
-    // Detailed Components
-    const lastY3 = (doc as any).lastAutoTable.finalY;
-    doc.text('4. Detalhamento dos Componentes de Risco', 20, lastY3 + 10);
-    autoTable(doc, {
-      startY: lastY3 + 15,
-      head: [['Componente', 'Descrição', 'Valor']],
-      body: [
-        ['RA', 'Risco de choque em seres vivos (descarga direta na estrutura)', results.componentes.RA.toExponential(3)],
-        ['RB', 'Risco de danos físicos (descarga direta na estrutura)', results.componentes.RB.toExponential(3)],
-        ['RC', 'Risco de falha de sistemas internos (descarga direta na estrutura)', results.componentes.RC.toExponential(3)],
-        ['RM', 'Risco de falha de sistemas internos (descarga próxima à estrutura)', results.componentes.RM.toExponential(3)],
-        ['RU', 'Risco de choque em seres vivos (descarga direta na linha)', results.componentes.RU.toExponential(3)],
-        ['RV', 'Risco de danos físicos (descarga direta na linha)', results.componentes.RV.toExponential(3)],
-        ['RW', 'Risco de falha de sistemas internos (descarga direta na linha)', results.componentes.RW.toExponential(3)],
-        ['RZ', 'Risco de falha de sistemas internos (descarga próxima à linha)', results.componentes.RZ.toExponential(3)]
-      ],
-      theme: 'grid',
-      headStyles: { fillColor: [40, 40, 40] }
-    });
-
-    // Conclusion
-    const finalY = (doc as any).lastAutoTable.finalY + 15;
-    doc.setFontSize(14);
-    doc.text('5. Conclusão Técnica', 20, finalY);
-    doc.setFontSize(11);
     const conclusion = results.aceitavel.R1 
       ? 'Com base nos cálculos realizados, o risco R1 é inferior ao risco tolerável normativo. A instalação de SPDA não é obrigatória por critério de risco de vida, porém recomenda-se avaliação de danos físicos (R2).'
       : `O risco calculado excede os limites toleráveis da NBR 5419-2. É OBRIGATÓRIA a instalação de um sistema de proteção contra descargas atmosféricas (SPDA) de ${results.classeSPDA}.`;
-    
-    doc.text(doc.splitTextToSize(conclusion, 170), 20, finalY + 10);
 
-    doc.save(`Relatorio_SPDA_${report.client.replace(/\s+/g, '_')}.pdf`);
+    const text = `
+RELATÓRIO DE GERENCIAMENTO DE RISCO SPDA
+Norma: ABNT NBR 5419-2:2026
+Data: ${format(new Date(report.createdAt), 'dd/MM/yyyy HH:mm')}
+
+1. IDENTIFICAÇÃO
+Cliente: ${report.client}
+Endereço: ${report.address}
+Observações: ${report.observations || 'N/A'}
+
+2. DADOS DA ESTRUTURA E LOCALIZAÇÃO
+Dimensões: ${inputs.comprimento}m x ${inputs.largura}m x ${inputs.altura}m
+Material / Cobertura: ${inputs.materialConstrucao} / ${inputs.tipoCobertura}
+Risco Incêndio / Combate: ${inputs.riscoIncendio} / ${inputs.medidasCombateIncendio}
+Densidade (Ng) / Cd: ${inputs.ng} desc/km²/ano / ${inputs.cd}
+Solo / Uw: ${inputs.resitividadeSolo} Ωm / ${inputs.tensaoSuportavel} kV
+Ocupação: ${inputs.numPessoas} pessoas (${inputs.tipoAtividade})
+Proteção Contato: ${inputs.medidasProtecaoContato}
+Sistemas Internos: ${inputs.sistemasMetalicos ? 'DPS Presente' : 'Nenhum'}
+Blindagem Espacial: ${inputs.blindagemEspacial ? 'Sim' : 'Não'}
+
+3. RESULTADOS DA ANÁLISE DE RISCO
+Risco | Valor Calculado | Risco Tolerável (Rt) | Status
+R1 - Vidas Humanas: ${results.R1.toExponential(3)} | ${results.Rt.R1.toExponential(3)} | ${results.aceitavel.R1 ? 'ACEITÁVEL' : 'CRÍTICO'}
+R2 - Danos Físicos: ${results.R2.toExponential(3)} | ${results.Rt.R2.toExponential(3)} | ${results.aceitavel.R2 ? 'ACEITÁVEL' : 'CRÍTICO'}
+R3 - Falhas Sistemas: ${results.R3.toExponential(3)} | ${results.Rt.R3.toExponential(3)} | ${results.aceitavel.R3 ? 'ACEITÁVEL' : 'CRÍTICO'}
+R4 - Perda Econômica: ${results.R4.toExponential(3)} | ${results.Rt.R4.toExponential(3)} | ${results.aceitavel.R4 ? 'ACEITÁVEL' : 'CRÍTICO'}
+
+4. DETALHAMENTO DOS COMPONENTES DE RISCO
+RA: ${results.componentes.RA.toExponential(3)} (Choque - direta estrutura)
+RB: ${results.componentes.RB.toExponential(3)} (Danos físicos - direta estrutura)
+RC: ${results.componentes.RC.toExponential(3)} (Falha sistemas - direta estrutura)
+RM: ${results.componentes.RM.toExponential(3)} (Falha sistemas - próxima estrutura)
+RU: ${results.componentes.RU.toExponential(3)} (Choque - direta linha)
+RV: ${results.componentes.RV.toExponential(3)} (Danos físicos - direta linha)
+RW: ${results.componentes.RW.toExponential(3)} (Falha sistemas - direta linha)
+RZ: ${results.componentes.RZ.toExponential(3)} (Falha sistemas - próxima linha)
+
+5. CONCLUSÃO TÉCNICA
+${conclusion}
+    `.trim();
+
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -1083,11 +1038,13 @@ const ReportView = ({ report, onBack }: any) => {
           Voltar
         </button>
         <button 
-          onClick={generatePDF}
-          className="flex items-center gap-2 bg-zinc-900 text-white py-2 px-4 rounded-lg font-semibold hover:bg-zinc-800 transition-colors"
+          onClick={copyToClipboard}
+          className={`flex items-center gap-2 py-2 px-4 rounded-lg font-semibold transition-all ${
+            copied ? 'bg-emerald-600 text-white' : 'bg-zinc-900 text-white hover:bg-zinc-800'
+          }`}
         >
-          <Download size={20} />
-          Exportar PDF (A4)
+          {copied ? <CheckCircle size={20} /> : <Clipboard size={20} />}
+          {copied ? 'Copiado!' : 'Copiar Relatório'}
         </button>
       </div>
 
@@ -1101,13 +1058,18 @@ const ReportView = ({ report, onBack }: any) => {
           <div className="space-y-4">
             <h3 className="font-bold text-zinc-900 flex items-center gap-2">
               <Info size={18} className="text-emerald-600" />
-              Dados de Entrada
+              1. Identificação
             </h3>
             <div className="bg-zinc-50 rounded-xl p-4 space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-zinc-500">Cliente:</span> <span className="font-semibold">{report.client}</span></div>
               <div className="flex justify-between"><span className="text-zinc-500">Endereço:</span> <span className="font-semibold">{report.address}</span></div>
-              <div className="flex justify-between"><span className="text-zinc-500">Ng:</span> <span className="font-semibold">{report.inputs.ng}</span></div>
-              <div className="flex justify-between"><span className="text-zinc-500">Dimensões:</span> <span className="font-semibold">{report.inputs.comprimento}x{report.inputs.largura}x{report.inputs.altura}m</span></div>
+              <div className="flex justify-between"><span className="text-zinc-500">Data:</span> <span className="font-semibold">{format(new Date(report.createdAt), 'dd/MM/yyyy HH:mm')}</span></div>
+              {report.observations && (
+                <div className="pt-2 border-t border-zinc-200 mt-2">
+                  <span className="text-zinc-500 block mb-1">Observações:</span>
+                  <p className="text-zinc-700 italic">{report.observations}</p>
+                </div>
+              )}
             </div>
             
             <Building3D 
@@ -1139,11 +1101,25 @@ const ReportView = ({ report, onBack }: any) => {
                 </>
               )}
             </div>
+
+            <div className="bg-zinc-50 rounded-xl p-4 space-y-2 text-xs">
+              <h4 className="font-bold text-zinc-900 mb-2">2. Dados da Estrutura</h4>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                <div className="flex justify-between"><span className="text-zinc-500">Dimensões:</span> <span className="font-semibold">{report.inputs.comprimento}x{report.inputs.largura}x{report.inputs.altura}m</span></div>
+                <div className="flex justify-between"><span className="text-zinc-500">Material:</span> <span className="font-semibold">{report.inputs.materialConstrucao}</span></div>
+                <div className="flex justify-between"><span className="text-zinc-500">Cobertura:</span> <span className="font-semibold">{report.inputs.tipoCobertura}</span></div>
+                <div className="flex justify-between"><span className="text-zinc-500">Risco Incêndio:</span> <span className="font-semibold">{report.inputs.riscoIncendio}</span></div>
+                <div className="flex justify-between"><span className="text-zinc-500">Ng:</span> <span className="font-semibold">{report.inputs.ng}</span></div>
+                <div className="flex justify-between"><span className="text-zinc-500">Solo (Uw):</span> <span className="font-semibold">{report.inputs.resitividadeSolo}Ωm</span></div>
+                <div className="flex justify-between"><span className="text-zinc-500">Ocupação:</span> <span className="font-semibold">{report.inputs.numPessoas}</span></div>
+                <div className="flex justify-between"><span className="text-zinc-500">DPS:</span> <span className="font-semibold">{report.inputs.sistemasMetalicos ? 'Sim' : 'Não'}</span></div>
+              </div>
+            </div>
           </div>
         </div>
 
         <div className="space-y-4">
-          <h3 className="font-bold text-zinc-900">Riscos Calculados (R) vs Toleráveis (Rt)</h3>
+          <h3 className="font-bold text-zinc-900">3. Riscos Calculados (R) vs Toleráveis (Rt)</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
               <thead className="bg-zinc-50 text-zinc-500 uppercase text-[10px] font-bold">
@@ -1174,6 +1150,51 @@ const ReportView = ({ report, onBack }: any) => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <h3 className="font-bold text-zinc-900">4. Detalhamento dos Componentes de Risco</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-zinc-50 rounded-xl p-4 overflow-hidden">
+              <h4 className="text-[10px] font-bold text-zinc-400 uppercase mb-3">Descargas Diretas (Estrutura)</h4>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between"><span>RA (Choque):</span> <span className="font-mono">{report.results.componentes.RA.toExponential(3)}</span></div>
+                <div className="flex justify-between"><span>RB (Danos Físicos):</span> <span className="font-mono">{report.results.componentes.RB.toExponential(3)}</span></div>
+                <div className="flex justify-between"><span>RC (Sistemas):</span> <span className="font-mono">{report.results.componentes.RC.toExponential(3)}</span></div>
+              </div>
+            </div>
+            <div className="bg-zinc-50 rounded-xl p-4 overflow-hidden">
+              <h4 className="text-[10px] font-bold text-zinc-400 uppercase mb-3">Descargas Próximas (Estrutura)</h4>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between"><span>RM (Sistemas):</span> <span className="font-mono">{report.results.componentes.RM.toExponential(3)}</span></div>
+              </div>
+            </div>
+            <div className="bg-zinc-50 rounded-xl p-4 overflow-hidden">
+              <h4 className="text-[10px] font-bold text-zinc-400 uppercase mb-3">Descargas Diretas (Linha)</h4>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between"><span>RU (Choque):</span> <span className="font-mono">{report.results.componentes.RU.toExponential(3)}</span></div>
+                <div className="flex justify-between"><span>RV (Danos Físicos):</span> <span className="font-mono">{report.results.componentes.RV.toExponential(3)}</span></div>
+                <div className="flex justify-between"><span>RW (Sistemas):</span> <span className="font-mono">{report.results.componentes.RW.toExponential(3)}</span></div>
+              </div>
+            </div>
+            <div className="bg-zinc-50 rounded-xl p-4 overflow-hidden">
+              <h4 className="text-[10px] font-bold text-zinc-400 uppercase mb-3">Descargas Próximas (Linha)</h4>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between"><span>RZ (Sistemas):</span> <span className="font-mono">{report.results.componentes.RZ.toExponential(3)}</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-8 border-t border-zinc-100">
+          <h3 className="font-bold text-zinc-900 mb-4">5. Conclusão Técnica</h3>
+          <div className="bg-zinc-900 text-zinc-100 p-6 rounded-2xl">
+            <p className="text-sm leading-relaxed italic">
+              {report.results.aceitavel.R1 
+                ? 'Com base nos cálculos realizados, o risco R1 é inferior ao risco tolerável normativo. A instalação de SPDA não é obrigatória por critério de risco de vida, porém recomenda-se avaliação de danos físicos (R2).'
+                : `O risco calculado excede os limites toleráveis da NBR 5419-2. É OBRIGATÓRIA a instalação de um sistema de proteção contra descargas atmosféricas (SPDA) de ${report.results.classeSPDA}.`}
+            </p>
           </div>
         </div>
       </div>
