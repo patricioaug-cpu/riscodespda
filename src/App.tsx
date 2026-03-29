@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged, 
+  auth, db, signOut, onAuthStateChanged, 
   sendPasswordResetEmail, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile,
   doc, getDoc, setDoc, deleteDoc, collection, addDoc, query, where, onSnapshot, 
   handleFirestoreError, OperationType 
@@ -29,15 +29,6 @@ const Login = () => {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-
-  const handleGoogleLogin = async () => {
-    try {
-      const result = await signInWithPopup(auth, googleProvider);
-      await syncUser(result.user);
-    } catch (error: any) {
-      setError(error.message);
-    }
-  };
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -149,23 +140,6 @@ const Login = () => {
             {isForgot ? 'Enviar Link' : (isRegister ? 'Cadastrar' : 'Entrar')}
           </button>
         </form>
-
-        {!isForgot && (
-          <div className="mt-6">
-            <div className="relative flex items-center py-4">
-              <div className="flex-grow border-t border-zinc-100"></div>
-              <span className="flex-shrink mx-4 text-zinc-300 text-xs font-bold uppercase">Ou</span>
-              <div className="flex-grow border-t border-zinc-100"></div>
-            </div>
-            <button 
-              onClick={handleGoogleLogin}
-              className="w-full flex items-center justify-center gap-3 bg-white border border-zinc-200 text-zinc-700 py-3 rounded-xl font-semibold hover:bg-zinc-50 transition-colors"
-            >
-              <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
-              Entrar com Google
-            </button>
-          </div>
-        )}
 
         <div className="mt-8 text-center space-y-2">
           {!isForgot && (
