@@ -1414,7 +1414,24 @@ export default function App() {
   const [reports, setReports] = useState<SPDAReport[]>([]);
   const [activeReport, setActiveReport] = useState<SPDAReport | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showLocationModal, setShowLocationModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+
+  useEffect(() => {
+    const explained = localStorage.getItem('locationExplained');
+    if (!explained) {
+      setShowLocationModal(true);
+    }
+  }, []);
+
+  const handleDismissLocationModal = () => {
+    localStorage.setItem('locationExplained', 'true');
+    setShowLocationModal(false);
+    // Optionally trigger geolocation to cache permission
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(() => {}, () => {}, { timeout: 1000 });
+    }
+  };
 
   useEffect(() => {
     let unsubReports: (() => void) | null = null;
@@ -1573,6 +1590,29 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* Location Explanation Modal */}
+      {showLocationModal && (
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-white rounded-2xl p-8 shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mb-6 mx-auto">
+              <MapPin size={32} />
+            </div>
+            <h3 className="text-2xl font-bold text-zinc-900 text-center mb-4">Uso de Localização</h3>
+            <p className="text-zinc-600 text-center text-sm mb-8 leading-relaxed">
+              Este aplicativo solicita acesso à sua localização geográfica para <strong>estimar automaticamente o valor de Ng</strong> (densidade de descargas atmosféricas) da sua região.
+              <br /><br />
+              Isso agiliza o preenchimento dos dados técnicos conforme a norma <strong>ABNT NBR 5419-2:2026</strong>.
+            </p>
+            <button 
+              onClick={handleDismissLocationModal}
+              className="w-full py-4 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 active:scale-95"
+            >
+              Entendi e Aceito
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
