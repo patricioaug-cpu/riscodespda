@@ -109,7 +109,7 @@ const NgMap: React.FC<NgMapProps> = ({ onSelect, onClose, initialNg }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] bg-[#00000099] backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col h-[90vh] md:h-[85vh]">
         {/* Header */}
         <div className="p-5 border-b border-zinc-100 flex justify-between items-center bg-white">
@@ -168,7 +168,7 @@ const NgMap: React.FC<NgMapProps> = ({ onSelect, onClose, initialNg }) => {
                     className="bg-white p-5 rounded-2xl border border-emerald-100 shadow-sm space-y-4"
                   >
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-emerald-600 text-white rounded-xl flex flex-col items-center justify-center shadow-lg shadow-emerald-100 shrink-0">
+                      <div className="w-12 h-12 bg-emerald-600 text-white rounded-xl flex flex-col items-center justify-center shadow-[0_10px_15px_-3px_rgba(16,185,129,0.1),0_4px_6px_-4px_rgba(16,185,129,0.1)] shrink-0">
                         <span className="text-lg font-black leading-none">{selectedNg}</span>
                         <span className="text-[7px] font-bold uppercase">Ng</span>
                       </div>
@@ -186,14 +186,14 @@ const NgMap: React.FC<NgMapProps> = ({ onSelect, onClose, initialNg }) => {
                     </div>
                     <button 
                       onClick={() => onSelect(selectedNg)}
-                      className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-50 active:scale-95"
+                      className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-[0_10px_15px_-3px_rgba(16,185,129,0.05),0_4px_6px_-4px_rgba(16,185,129,0.05)] active:scale-95"
                     >
                       <Check size={18} />
                       Confirmar
                     </button>
                   </motion.div>
                 ) : (
-                  <div className="bg-zinc-100/50 border border-dashed border-zinc-200 p-6 rounded-2xl flex flex-col items-center justify-center text-center space-y-2">
+                  <div className="bg-[#f4f4f580] border border-dashed border-zinc-200 p-6 rounded-2xl flex flex-col items-center justify-center text-center space-y-2">
                     <MapPin className="text-zinc-300" size={32} />
                     <p className="text-xs font-medium text-zinc-400">Clique no mapa para selecionar um local</p>
                   </div>

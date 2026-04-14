@@ -11,8 +11,11 @@ import { calculateSPDARisk } from './lib/spda-engine';
 import { 
   LayoutDashboard, FileText, PlusCircle, LogOut, ShieldCheck, 
   HelpCircle, AlertTriangle, CheckCircle, ChevronRight, User, 
-  Settings, Trash2, Clipboard, Info, RotateCcw, Loader2
+  Settings, Trash2, Clipboard, Info, RotateCcw, Loader2,
+  Printer, Download, ExternalLink
 } from 'lucide-react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import { format, differenceInDays } from 'date-fns';
 import NgMap from './components/NgMap';
 import { MapPin } from 'lucide-react';
@@ -133,7 +136,7 @@ const Login = () => {
 
           <button 
             type="submit"
-            className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100"
+            className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 transition-colors shadow-[0_10px_15px_-3px_rgba(16,185,129,0.1),0_4px_6px_-4px_rgba(16,185,129,0.1)]"
           >
             {isForgot ? 'Enviar Link' : (isRegister ? 'Cadastrar' : 'Entrar')}
           </button>
@@ -179,7 +182,7 @@ const TrialBanner = ({ user }: { user: UserProfile }) => {
   if (user.status === 'liberado') return null;
   if (user.status === 'pendente') {
     return (
-      <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 bg-[#000000cc] backdrop-blur-sm flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-2xl p-8 text-center">
           <CheckCircle className="mx-auto text-emerald-600 mb-4" size={48} />
           <h2 className="text-2xl font-bold text-zinc-900 mb-4">Solicitação Pendente</h2>
@@ -200,7 +203,7 @@ const TrialBanner = ({ user }: { user: UserProfile }) => {
 
   if (isExpired) {
     return (
-      <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 bg-[#000000cc] backdrop-blur-sm flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-2xl p-8 text-center">
           <AlertTriangle className="mx-auto text-emerald-600 mb-4" size={48} />
           <h2 className="text-2xl font-bold text-zinc-900 mb-4">Período de Avaliação Encerrado</h2>
@@ -251,7 +254,7 @@ const Dashboard = ({ user, onNewReport, onEditReport, onViewReport, reports, set
         </div>
         <button 
           onClick={onNewReport}
-          className="flex items-center gap-2 bg-emerald-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-emerald-700 transition-colors"
+          className="flex items-center gap-2 bg-emerald-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-emerald-700 transition-colors shadow-[0_10px_15px_-3px_rgba(16,185,129,0.2),0_4px_6px_-4px_rgba(16,185,129,0.2)]"
         >
           <PlusCircle size={20} />
           Novo Cálculo
@@ -259,8 +262,8 @@ const Dashboard = ({ user, onNewReport, onEditReport, onViewReport, reports, set
       </div>
 
       {reports.length === 0 ? (
-        <div className="bg-white border-2 border-dashed border-zinc-200 rounded-2xl p-12 text-center">
-          <FileText className="mx-auto text-zinc-300 mb-4" size={48} />
+        <div className="bg-white border-2 border-dashed border-zinc-100 rounded-2xl p-12 text-center">
+          <FileText className="mx-auto text-zinc-200 mb-4" size={48} />
           <h3 className="text-lg font-semibold text-zinc-900 mb-1">Nenhum relatório encontrado</h3>
           <p className="text-zinc-500 mb-6">Comece criando seu primeiro gerenciamento de risco.</p>
           <button 
@@ -280,11 +283,11 @@ const Dashboard = ({ user, onNewReport, onEditReport, onViewReport, reports, set
             >
               <div className="p-5">
                 <div className="flex justify-between items-start mb-4">
-                  <div className="w-10 h-10 bg-zinc-100 rounded-lg flex items-center justify-center text-zinc-600 group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-colors">
+                  <div className="w-10 h-10 bg-zinc-50 rounded-lg flex items-center justify-center text-zinc-400 group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-colors">
                     <FileText size={20} />
                   </div>
                   <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
-                    report.results.aceitavel.R1 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                    report.results.aceitavel.R1 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
                   }`}>
                     {report.results.aceitavel.R1 ? 'Risco Aceitável' : 'Risco Crítico'}
                   </div>
@@ -355,14 +358,18 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
       riscoIncendio: 'Baixo',
       medidasCombateIncendio: 'Nenhuma',
       tipoFioInterno: 'Não blindado',
-      tensaoSuportavel: 2.5
+      tensaoSuportavel: 2.5,
+      valorEstrutura: 1000000,
+      valorConteudo: 500000,
+      valorSistemas: 200000,
+      valorAtividade: 100000
     };
 
     // Sanitize numeric fields to prevent NaN
     const sanitized = { ...base };
     const numericFields: (keyof SPDAInputs)[] = [
       'comprimento', 'largura', 'altura', 'latitude', 'longitude', 'ng', 'cd', 'numPessoas', 'tempoPermanencia',
-      'resitividadeSolo', 'tensaoSuportavel'
+      'resitividadeSolo', 'tensaoSuportavel', 'valorEstrutura', 'valorConteudo', 'valorSistemas', 'valorAtividade'
     ];
     numericFields.forEach(field => {
       if (typeof sanitized[field] === 'number' && isNaN(sanitized[field] as number)) {
@@ -430,7 +437,7 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 z-50 bg-white/95 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center"
+              className="absolute inset-0 z-50 bg-[#fffffff2] backdrop-blur-md flex flex-col items-center justify-center p-8 text-center"
             >
               <motion.div 
                 animate={{ 
@@ -442,7 +449,7 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
                   repeat: Infinity,
                   ease: "easeInOut"
                 }}
-                className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-8 shadow-inner"
+                className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mb-8 shadow-inner"
               >
                 <ShieldCheck className="text-emerald-600" size={40} />
               </motion.div>
@@ -452,7 +459,7 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
               
               <div className="w-full max-w-sm bg-zinc-100 h-2.5 rounded-full overflow-hidden mb-6 shadow-sm">
                 <motion.div 
-                  className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"
+                  className="h-full bg-emerald-600 shadow-[0_0_10px_rgba(16,185,129,0.2)]"
                   initial={{ width: 0 }}
                   animate={{ width: `${calcProgress}%` }}
                   transition={{ duration: 0.4 }}
@@ -471,7 +478,7 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
         <div className="bg-zinc-50 border-b border-zinc-100 p-4 flex justify-between">
           {steps.map((s) => (
             <div key={s.id} className={`flex items-center gap-2 ${step === s.id ? 'text-emerald-600' : 'text-zinc-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${step === s.id ? 'bg-emerald-100' : 'bg-zinc-200'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${step === s.id ? 'bg-emerald-600 text-white' : 'bg-zinc-200'}`}>
                 {s.id}
               </div>
               <span className="hidden sm:inline text-xs font-semibold">{s.title}</span>
@@ -499,7 +506,7 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Cliente / Empresa</label>
                 <input 
                   type="text" name="cliente" value={formData.cliente} onChange={handleChange}
-                  className="w-full p-2 border border-zinc-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                  className="w-full p-2 border border-zinc-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none placeholder-zinc-400"
                   placeholder="Nome do cliente"
                 />
               </div>
@@ -507,7 +514,7 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Endereço da Obra</label>
                 <input 
                   type="text" name="endereco" value={formData.endereco} onChange={handleChange}
-                  className="w-full p-2 border border-zinc-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                  className="w-full p-2 border border-zinc-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none placeholder-zinc-400"
                   placeholder="Endereço completo"
                 />
               </div>
@@ -515,7 +522,7 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
                 <label className="block text-sm font-medium text-zinc-700 mb-1">Observações Técnicas</label>
                 <textarea 
                   name="observacoes" value={formData.observacoes} onChange={handleChange}
-                  className="w-full p-2 border border-zinc-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none h-24"
+                  className="w-full p-2 border border-zinc-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none h-24 placeholder-zinc-400"
                   placeholder="Notas adicionais..."
                 />
               </div>
@@ -541,7 +548,7 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
               </div>
               <div className="flex items-center gap-2 mt-4">
                 <input type="checkbox" name="alturaMaior25m" checked={formData.alturaMaior25m} onChange={handleChange} id="h25" />
-                <label htmlFor="h25" className="text-sm text-zinc-700">Estrutura com altura superior a 25m?</label>
+                <label htmlFor="h25" className="text-sm text-zinc-600">Estrutura com altura superior a 25m?</label>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -586,21 +593,21 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
               <div className="space-y-2 mt-4">
                 <h3 className="text-sm font-bold text-zinc-700">Características Adicionais</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <label className="flex items-center gap-2 p-2 border border-zinc-100 rounded-lg hover:bg-zinc-50 cursor-pointer">
+                  <label className="flex items-center gap-2 p-2 border border-zinc-100 rounded-lg hover:bg-zinc-50 cursor-pointer transition-colors">
                     <input type="checkbox" name="sistemasMetalicos" checked={formData.sistemasMetalicos} onChange={handleChange} />
-                    <span className="text-xs">Sistemas Internos (DPS)</span>
+                    <span className="text-xs text-zinc-600">Sistemas Internos (DPS)</span>
                   </label>
-                  <label className="flex items-center gap-2 p-2 border border-zinc-100 rounded-lg hover:bg-zinc-50 cursor-pointer">
+                  <label className="flex items-center gap-2 p-2 border border-zinc-100 rounded-lg hover:bg-zinc-50 cursor-pointer transition-colors">
                     <input type="checkbox" name="blindagemEspacial" checked={formData.blindagemEspacial} onChange={handleChange} />
-                    <span className="text-xs">Blindagem Espacial (Gaiola)</span>
+                    <span className="text-xs text-zinc-600">Blindagem Espacial (Gaiola)</span>
                   </label>
-                  <label className="flex items-center gap-2 p-2 border border-zinc-100 rounded-lg hover:bg-zinc-50 cursor-pointer">
+                  <label className="flex items-center gap-2 p-2 border border-zinc-100 rounded-lg hover:bg-zinc-50 cursor-pointer transition-colors">
                     <input type="checkbox" name="tubulacoesMetalicas" checked={formData.tubulacoesMetalicas} onChange={handleChange} />
-                    <span className="text-xs">Tubulações Metálicas</span>
+                    <span className="text-xs text-zinc-600">Tubulações Metálicas</span>
                   </label>
-                  <label className="flex items-center gap-2 p-2 border border-zinc-100 rounded-lg hover:bg-zinc-50 cursor-pointer">
+                  <label className="flex items-center gap-2 p-2 border border-zinc-100 rounded-lg hover:bg-zinc-50 cursor-pointer transition-colors">
                     <input type="checkbox" name="estruturasVizinhas" checked={formData.estruturasVizinhas} onChange={handleChange} />
-                    <span className="text-xs">Estruturas Vizinhas Mais Altas</span>
+                    <span className="text-xs text-zinc-600">Estruturas Vizinhas Mais Altas</span>
                   </label>
                 </div>
               </div>
@@ -642,7 +649,15 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                   <div>
-                    <label className="block text-sm font-medium text-zinc-700 mb-1">Resistividade do Solo (Ωm)</label>
+                    <label className="block text-sm font-medium text-zinc-700 mb-1 flex items-center gap-1">
+                      Resistividade do Solo (Ωm)
+                      <div className="group relative">
+                        <Info size={14} className="text-zinc-400 cursor-help" />
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-zinc-900 text-white text-[10px] rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                          Necessário para calcular o risco de choque (R1). Se desconhecido, use 500 Ωm como padrão.
+                        </div>
+                      </div>
+                    </label>
                     <input type="number" name="resitividadeSolo" value={formData.resitividadeSolo} onChange={handleChange} className="w-full p-2 border border-zinc-200 rounded-lg" />
                   </div>
                   <div>
@@ -710,13 +725,41 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
                   <option>Barreiras</option>
                 </select>
               </div>
+
+              <div className="pt-4 border-t border-zinc-100">
+                <h3 className="text-sm font-bold text-zinc-700 mb-3 flex items-center gap-2">
+                  <Info size={16} className="text-emerald-600" />
+                  Valores Econômicos (Para Risco R4)
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Valor da Estrutura (R$)</label>
+                    <input type="number" name="valorEstrutura" value={formData.valorEstrutura} onChange={handleChange} className="w-full p-2 border border-zinc-200 rounded-lg text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Valor do Conteúdo (R$)</label>
+                    <input type="number" name="valorConteudo" value={formData.valorConteudo} onChange={handleChange} className="w-full p-2 border border-zinc-200 rounded-lg text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Valor dos Sistemas (R$)</label>
+                    <input type="number" name="valorSistemas" value={formData.valorSistemas} onChange={handleChange} className="w-full p-2 border border-zinc-200 rounded-lg text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Valor da Atividade (R$)</label>
+                    <input type="number" name="valorAtividade" value={formData.valorAtividade} onChange={handleChange} className="w-full p-2 border border-zinc-200 rounded-lg text-sm" />
+                  </div>
+                </div>
+                <p className="text-[10px] text-zinc-400 mt-2 italic">
+                  Estes valores são utilizados para calcular o risco de perda econômica (R4). Se não informados, serão usados valores padrão.
+                </p>
+              </div>
             </div>
           )}
 
           {step === 5 && (
             <div className="space-y-6">
               <h2 className="text-xl font-bold text-zinc-900 mb-6">Revisão dos Dados</h2>
-              <div className="bg-zinc-50 rounded-xl p-6 space-y-4">
+              <div className="bg-zinc-50 rounded-xl p-6 space-y-4 border border-zinc-100">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <p className="text-zinc-400 uppercase text-[10px] font-bold">Cliente</p>
@@ -746,9 +789,18 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
                     <p className="text-zinc-400 uppercase text-[10px] font-bold">Uw (kV)</p>
                     <p className="font-semibold text-zinc-900">{formData.tensaoSuportavel}</p>
                   </div>
+                  <div className="col-span-2 pt-2 border-t border-zinc-100">
+                    <p className="text-zinc-400 uppercase text-[10px] font-bold">Valores Econômicos (R$)</p>
+                    <p className="text-[10px] text-zinc-600">
+                      Estrutura: {formData.valorEstrutura?.toLocaleString()} | 
+                      Conteúdo: {formData.valorConteudo?.toLocaleString()} | 
+                      Sistemas: {formData.valorSistemas?.toLocaleString()} | 
+                      Atividade: {formData.valorAtividade?.toLocaleString()}
+                    </p>
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-3 p-4 bg-emerald-50 rounded-xl border border-emerald-100 text-emerald-800 text-sm">
+              <div className="flex items-center gap-3 p-4 bg-emerald-50 rounded-xl border border-emerald-100 text-emerald-700 text-sm">
                 <Info size={20} />
                 <p>Ao clicar em calcular, o sistema processará os riscos R1, R2, R3 e R4 conforme a norma.</p>
               </div>
@@ -758,13 +810,13 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
           <div className="mt-12 flex justify-between">
             <button 
               onClick={step === 1 ? onCancel : () => setStep(step - 1)}
-              className="px-6 py-2 text-zinc-600 font-semibold hover:bg-zinc-100 rounded-lg transition-colors"
+              className="px-6 py-2 text-zinc-500 font-semibold hover:bg-zinc-50 rounded-lg transition-colors"
             >
               {step === 1 ? 'Cancelar' : 'Voltar'}
             </button>
             <button 
               onClick={step === 5 ? handleCalculate : () => setStep(step + 1)}
-              className="px-8 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-200"
+              className="px-8 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 transition-colors shadow-[0_10px_15px_-3px_rgba(16,185,129,0.2),0_4px_6px_-4px_rgba(16,185,129,0.2)]"
             >
               {step === 5 ? 'Calcular e Salvar' : 'Próximo'}
             </button>
@@ -775,7 +827,7 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
   );
 };
 
-const Building3D = ({ width, length, height }: { width: number, length: number, height: number }) => {
+const Building3D = ({ width, length, height, lpsDetails, lpsType = 'malha' }: { width: number, length: number, height: number, lpsDetails?: any, lpsType?: 'malha' | 'esfera' | 'faraday' }) => {
   const [rotation, setRotation] = useState({ x: -25, y: 45 });
   const [isDragging, setIsDragging] = useState(false);
   const [autoRotate, setAutoRotate] = useState(true);
@@ -789,6 +841,14 @@ const Building3D = ({ width, length, height }: { width: number, length: number, 
   const w = (width || 0) * scale;
   const l = (length || 0) * scale;
   const h = (height || 0) * scale;
+
+  // LPS Parameters
+  const meshSize = lpsDetails?.malha || 20;
+  const sphereRadius = lpsDetails?.esfera || 60;
+  const downConductorDist = lpsDetails?.distanciaDescidas || 25;
+
+  // Calculate down-conductors
+  const numDescidas = lpsDetails?.numDescidasMinimo || 2;
 
   useEffect(() => {
     let animationFrameId: number;
@@ -889,19 +949,38 @@ const Building3D = ({ width, length, height }: { width: number, length: number, 
 
   return (
     <div 
-      className="flex flex-col items-center justify-center h-80 bg-zinc-950 rounded-2xl overflow-hidden relative cursor-grab active:cursor-grabbing select-none group/3d"
-      style={{ perspective: '1200px' }}
+      className="flex flex-col items-center justify-center h-96 bg-zinc-50 rounded-2xl overflow-hidden relative cursor-grab active:cursor-grabbing select-none group/3d"
+      style={{ 
+        perspective: '1200px',
+        background: 'radial-gradient(circle at center, #f8fafc 0%, #f1f5f9 100%)'
+      }}
       onMouseDown={handleMouseDown}
       onTouchStart={handleTouchStart}
     >
-      <div className="absolute top-4 left-4 text-[10px] font-bold text-emerald-500/50 uppercase tracking-widest z-10">
-        Visualização Técnica 3D (Arraste para girar)
+      {/* Atmosphere Glow */}
+      <div className="absolute inset-0 bg-[#10b9810d] blur-[120px] pointer-events-none"></div>
+      
+      <div className="absolute top-4 left-4 flex flex-col gap-1 z-10">
+        <div className="text-[10px] font-bold text-[#05966980] uppercase tracking-widest">
+          Visualização Técnica 3D
+        </div>
+        {lpsDetails && (
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 bg-[#10b9811a] text-emerald-600 text-[9px] font-bold rounded border border-[#10b98133]">
+              CLASSE {['I', 'II', 'III', 'IV'][lpsDetails.nivel - 1]}
+            </span>
+            <span className="text-[9px] text-zinc-400 font-medium">
+              Malha: {lpsDetails.malha}m | Descidas: {lpsDetails.distanciaDescidas}m
+            </span>
+          </div>
+        )}
       </div>
 
       <button 
         onClick={resetRotation}
-        className="absolute top-4 right-4 p-1.5 bg-zinc-900/80 text-zinc-400 hover:text-emerald-400 rounded-lg border border-zinc-800 opacity-0 group-hover/3d:opacity-100 transition-opacity z-20"
+        className="absolute top-4 right-4 p-1.5 bg-[#ffffffcc] text-zinc-400 hover:text-emerald-600 rounded-lg border border-zinc-200 opacity-0 group-hover/3d:opacity-100 transition-opacity z-20 shadow-sm"
         title="Resetar Vista"
+        data-html2canvas-ignore="true"
       >
         <RotateCcw size={14} />
       </button>
@@ -916,59 +995,208 @@ const Building3D = ({ width, length, height }: { width: number, length: number, 
           transition: (isDragging || autoRotate) ? 'none' : 'transform 0.1s ease-out'
         }}
       >
+        {/* Ground Shadow */}
+        <div 
+          className="absolute bg-[#00000066] blur-xl rounded-full"
+          style={{ 
+            width: `${w * 1.2}px`, 
+            height: `${l * 1.2}px`, 
+            left: `calc(50% - ${w * 0.6}px)`, 
+            top: `calc(50% - ${l * 0.6}px)`, 
+            transform: `rotateX(90deg) translateZ(-${h/2 + 5}px)`,
+          }}
+        ></div>
+
         {/* Grid Floor */}
         <div 
-          className="absolute border border-emerald-500/10" 
+          className="absolute border border-[#10b9811a]" 
           style={{ 
             width: '400px', 
             height: '400px', 
             left: `calc(50% - 200px)`, 
             top: `calc(50% - 200px)`, 
             transform: `rotateX(90deg) translateZ(-${h/2 + 2}px)`,
-            background: 'radial-gradient(circle, rgba(16, 185, 129, 0.05) 1px, transparent 1px)',
-            backgroundSize: '20px 20px'
+            background: 'radial-gradient(circle, rgba(16, 185, 129, 0.08) 1px, transparent 1px)',
+            backgroundSize: '20px 20px',
+            maskImage: 'radial-gradient(circle, black 40%, transparent 80%)'
           }}
         ></div>
 
-        {/* Front */}
-        <div className="absolute inset-0 bg-emerald-500/20 border border-emerald-400/40 flex flex-col items-center justify-center" style={{ transform: `translateZ(${l/2}px)` }}>
-          <div className="w-full h-full border border-emerald-400/10 flex items-center justify-center">
-            <span className="text-[9px] text-emerald-400 font-bold font-mono bg-zinc-900/80 px-1 rounded">{width}m</span>
+        {/* Building Structure */}
+        <div className="absolute inset-0" style={{ transformStyle: 'preserve-3d' }}>
+          {/* Front */}
+          <div 
+            className="absolute inset-0 bg-[#10b9811a] border border-[#34d3994d] backdrop-blur-[2px]" 
+            style={{ 
+              transform: `translateZ(${l/2}px)`,
+              boxShadow: 'inset 0 0 20px rgba(0,0,0,0.1)',
+              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%)'
+            }}
+          ></div>
+          {/* Back */}
+          <div 
+            className="absolute inset-0 bg-[#064e3b0d] border border-[#34d39933]" 
+            style={{ 
+              transform: `rotateY(180deg) translateZ(${l/2}px)`,
+              boxShadow: 'inset 0 0 20px rgba(0,0,0,0.15)'
+            }}
+          ></div>
+          {/* Left */}
+          <div 
+            className="absolute inset-0 bg-[#065f460d] border border-[#34d39933]" 
+            style={{ 
+              width: `${l}px`, 
+              left: `calc(50% - ${l/2}px)`, 
+              transform: `rotateY(-90deg) translateZ(${w/2}px)`,
+              boxShadow: 'inset 0 0 20px rgba(0,0,0,0.1)'
+            }}
+          ></div>
+          {/* Right */}
+          <div 
+            className="absolute inset-0 bg-[#0478570d] border border-[#34d39933]" 
+            style={{ 
+              width: `${l}px`, 
+              left: `calc(50% - ${l/2}px)`, 
+              transform: `rotateY(90deg) translateZ(${w/2}px)`,
+              boxShadow: 'inset 0 0 20px rgba(0,0,0,0.1)'
+            }}
+          ></div>
+          {/* Top */}
+          <div 
+            className="absolute inset-0 bg-[#34d3991a] border border-[#6ee7b74d]" 
+            style={{ 
+              height: `${l}px`, 
+              top: `calc(50% - ${l/2}px)`, 
+              transform: `rotateX(90deg) translateZ(${h/2}px)`,
+              boxShadow: 'inset 0 0 10px rgba(255,255,255,0.5)',
+              background: 'linear-gradient(to bottom, rgba(52, 211, 153, 0.15), rgba(16, 185, 129, 0.05))'
+            }}
+          ></div>
+        </div>
+
+        {/* LPS Elements */}
+        {lpsDetails && (
+          <div className="absolute inset-0" style={{ transformStyle: 'preserve-3d' }}>
+            {/* Mesh (Malha) */}
+            {(lpsType === 'malha' || lpsType === 'faraday') && (
+              <div 
+                className="absolute inset-0" 
+                style={{ 
+                  height: `${l}px`, 
+                  top: `calc(50% - ${l/2}px)`, 
+                  transform: `rotateX(90deg) translateZ(${h/2 + 1}px)`,
+                  backgroundImage: `linear-gradient(to right, rgba(16, 185, 129, 0.6) 1.5px, transparent 1.5px), linear-gradient(to bottom, rgba(16, 185, 129, 0.6) 1.5px, transparent 1.5px)`,
+                  backgroundSize: `${(meshSize/width)*w}px ${(meshSize/length)*l}px`,
+                  border: '1.5px solid rgba(16, 185, 129, 0.9)',
+                  boxShadow: '0 0 10px rgba(16, 185, 129, 0.3)'
+                }}
+              ></div>
+            )}
+
+            {/* Faraday Cage (Side Mesh) */}
+            {lpsType === 'faraday' && (
+              <>
+                <div className="absolute inset-0" style={{ 
+                  transform: `translateZ(${l/2 + 1}px)`,
+                  backgroundImage: `linear-gradient(to right, rgba(16, 185, 129, 0.4) 1px, transparent 1px), linear-gradient(to bottom, rgba(16, 185, 129, 0.4) 1px, transparent 1px)`,
+                  backgroundSize: `${(meshSize/width)*w}px ${(meshSize/height)*h}px`,
+                  border: '1px solid rgba(16, 185, 129, 0.6)',
+                  boxShadow: '0 0 8px rgba(16, 185, 129, 0.2)'
+                }}></div>
+                <div className="absolute inset-0" style={{ 
+                  width: `${l}px`, left: `calc(50% - ${l/2}px)`,
+                  transform: `rotateY(90deg) translateZ(${w/2 + 1}px)`,
+                  backgroundImage: `linear-gradient(to right, rgba(16, 185, 129, 0.4) 1px, transparent 1px), linear-gradient(to bottom, rgba(16, 185, 129, 0.4) 1px, transparent 1px)`,
+                  backgroundSize: `${(meshSize/length)*l}px ${(meshSize/height)*h}px`,
+                  border: '1px solid rgba(16, 185, 129, 0.6)',
+                  boxShadow: '0 0 8px rgba(16, 185, 129, 0.2)'
+                }}></div>
+              </>
+            )}
+
+            {/* Rolling Sphere (Esfera Rolante) */}
+            {lpsType === 'esfera' && (
+              <div 
+                className="absolute border-2 border-dashed border-[#34d39966] rounded-full"
+                style={{ 
+                  width: `${sphereRadius * 2 * scale}px`,
+                  height: `${sphereRadius * 2 * scale}px`,
+                  left: `calc(50% - ${sphereRadius * scale}px)`,
+                  top: `calc(50% - ${sphereRadius * scale}px)`,
+                  transform: `rotateX(90deg) translateZ(${h/2 + sphereRadius * scale}px)`,
+                  backgroundColor: 'rgba(16, 185, 129, 0.05)'
+                }}
+              >
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-[8px] text-emerald-600 font-bold">R={sphereRadius}m</span>
+                </div>
+              </div>
+            )}
+
+            {/* Down Conductors (Descidas) */}
+            {Array.from({ length: numDescidas }).map((_, i) => {
+              const perimetro = 2 * (width + length);
+              const posOnPerimeter = (i * perimetro) / numDescidas;
+              
+              let x = 0, z = 0;
+              if (posOnPerimeter <= width) {
+                x = (posOnPerimeter / width) * w - w/2;
+                z = l/2;
+              } else if (posOnPerimeter <= width + length) {
+                x = w/2;
+                z = l/2 - ((posOnPerimeter - width) / length) * l;
+              } else if (posOnPerimeter <= 2 * width + length) {
+                x = w/2 - ((posOnPerimeter - (width + length)) / width) * w;
+                z = -l/2;
+              } else {
+                x = -w/2;
+                z = -l/2 + ((posOnPerimeter - (2 * width + length)) / length) * l;
+              }
+
+              return (
+                <div 
+                  key={i}
+                  className="absolute bg-emerald-400"
+                  style={{ 
+                    width: '3px',
+                    height: `${h}px`,
+                    left: `calc(50% + ${x}px - 1.5px)`,
+                    top: `calc(50% - ${h/2}px)`,
+                    transform: `translateZ(${z}px)`,
+                    boxShadow: '0 0 12px rgba(16, 185, 129, 0.6), 0 0 4px rgba(255, 255, 255, 0.4)'
+                  }}
+                ></div>
+              );
+            })}
           </div>
-        </div>
-        {/* Back */}
-        <div className="absolute inset-0 bg-emerald-900/20 border border-emerald-400/40" style={{ transform: `rotateY(180deg) translateZ(${l/2}px)` }}></div>
-        {/* Left */}
-        <div className="absolute inset-0 bg-emerald-700/20 border border-emerald-400/40 flex items-center justify-center" style={{ width: `${l}px`, left: `calc(50% - ${l/2}px)`, transform: `rotateY(-90deg) translateZ(${w/2}px)` }}>
-          <span className="text-[9px] text-emerald-400 font-bold font-mono bg-zinc-900/80 px-1 rounded rotate-90">{length}m</span>
-        </div>
-        {/* Right */}
-        <div className="absolute inset-0 bg-emerald-700/20 border border-emerald-400/40" style={{ width: `${l}px`, left: `calc(50% - ${l/2}px)`, transform: `rotateY(90deg) translateZ(${w/2}px)` }}></div>
-        {/* Top */}
-        <div className="absolute inset-0 bg-emerald-400/20 border border-emerald-300/40" style={{ height: `${l}px`, top: `calc(50% - ${l/2}px)`, transform: `rotateX(90deg) translateZ(${h/2}px)` }}>
-          <div className="w-full h-full flex items-center justify-center">
-             <div className="w-4 h-4 border-2 border-emerald-400/30 rounded-full"></div>
-          </div>
-        </div>
+        )}
         {/* Bottom */}
-        <div className="absolute inset-0 bg-zinc-800/50 border border-emerald-400/40" style={{ height: `${l}px`, top: `calc(50% - ${l/2}px)`, transform: `rotateX(-90deg) translateZ(${h/2}px)` }}></div>
+        <div 
+          className="absolute inset-0 bg-zinc-200 border border-[#34d39933]" 
+          style={{ 
+            height: `${l}px`, 
+            top: `calc(50% - ${l/2}px)`, 
+            transform: `rotateX(-90deg) translateZ(${h/2}px)`,
+            boxShadow: '0 0 30px rgba(0,0,0,0.1)'
+          }}
+        ></div>
         
         {/* Height Dimension Line */}
         <div className="absolute left-[-30px] top-0 bottom-0 flex items-center justify-center" style={{ transform: `rotateY(-90deg) translateZ(${w/2 + 15}px)` }}>
-          <div className="h-full w-[1px] bg-emerald-500/30 relative">
-            <div className="absolute top-0 left-[-2px] w-1 h-[1px] bg-emerald-500/50"></div>
-            <div className="absolute bottom-0 left-[-2px] w-1 h-[1px] bg-emerald-500/50"></div>
+          <div className="h-full w-[1px] bg-[#10b9814d] relative">
+            <div className="absolute top-0 left-[-2px] w-1 h-[1px] bg-[#10b98180]"></div>
+            <div className="absolute bottom-0 left-[-2px] w-1 h-[1px] bg-[#10b98180]"></div>
             <div className="absolute top-1/2 left-[-25px] transform -translate-y-1/2 -rotate-90">
-              <span className="text-[9px] text-emerald-400 font-bold font-mono bg-zinc-900/80 px-1 rounded whitespace-nowrap">{height}m (H)</span>
+              <span className="text-[9px] text-emerald-600 font-bold font-mono bg-[#ffffffcc] px-1 rounded whitespace-nowrap">{height}m (H)</span>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="absolute bottom-4 right-4 flex flex-col items-end gap-1 text-[9px] text-zinc-500 font-mono bg-zinc-900/50 p-2 rounded-lg border border-zinc-800">
-        <div className="flex gap-2"><span className="text-emerald-500/70">LARGURA:</span> <span className="text-zinc-300">{width}m</span></div>
-        <div className="flex gap-2"><span className="text-emerald-500/70">COMPRIM.:</span> <span className="text-zinc-300">{length}m</span></div>
-        <div className="flex gap-2"><span className="text-emerald-500/70">ALTURA:</span> <span className="text-zinc-300">{height}m</span></div>
+      <div className="absolute bottom-4 right-4 flex flex-col items-end gap-1 text-[9px] text-zinc-500 font-mono bg-[#18181b80] p-2 rounded-lg border border-zinc-800">
+        <div className="flex gap-2"><span className="text-[#10b981b3]">LARGURA:</span> <span className="text-zinc-300">{width}m</span></div>
+        <div className="flex gap-2"><span className="text-[#10b981b3]">COMPRIM.:</span> <span className="text-zinc-300">{length}m</span></div>
+        <div className="flex gap-2"><span className="text-[#10b981b3]">ALTURA:</span> <span className="text-zinc-300">{height}m</span></div>
       </div>
     </div>
   );
@@ -976,12 +1204,73 @@ const Building3D = ({ width, length, height }: { width: number, length: number, 
 
 const ReportView = ({ report, onBack }: any) => {
   const [copied, setCopied] = useState(false);
+  const [lpsType, setLpsType] = useState<'malha' | 'esfera' | 'faraday'>('malha');
+  const reportRef = useRef<HTMLDivElement>(null);
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const exportToPDF = async () => {
+    if (!reportRef.current) return;
+    
+    const element = reportRef.current;
+    const originalStyle = element.style.cssText;
+    element.style.width = '800px';
+    
+    try {
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const margin = 20;
+      const contentWidth = pageWidth - (2 * margin);
+      
+      // Select all pages marked with .pdf-page
+      const pages = element.querySelectorAll('.pdf-page');
+      
+      for (let i = 0; i < pages.length; i++) {
+        const pageElement = pages[i] as HTMLElement;
+        
+        const canvas = await html2canvas(pageElement, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+          windowWidth: 800
+        });
+        
+        const imgData = canvas.toDataURL('image/png');
+        const imgWidth = canvas.width;
+        const imgHeight = canvas.height;
+        const ratio = contentWidth / imgWidth;
+        const displayHeight = imgHeight * ratio;
+        
+        if (i > 0) pdf.addPage();
+        pdf.addImage(imgData, 'PNG', margin, margin, contentWidth, displayHeight, undefined, 'FAST');
+      }
+      
+      pdf.save(`Relatorio_SPDA_${report.client.replace(/\s+/g, '_')}.pdf`);
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+      alert('Erro ao gerar PDF.');
+    } finally {
+      element.style.cssText = originalStyle;
+    }
+  };
 
   const copyToClipboard = () => {
     const { inputs, results } = report;
     const conclusion = results.aceitavel.R1 
       ? 'Com base nos cálculos realizados, o risco R1 é inferior ao risco tolerável normativo. A instalação de SPDA não é obrigatória por critério de risco de vida, porém recomenda-se avaliação de danos físicos (R2).'
       : `O risco calculado excede os limites toleráveis da NBR 5419-2. É OBRIGATÓRIA a instalação de um sistema de proteção contra descargas atmosféricas (SPDA) de ${results.classeSPDA}.`;
+
+    const lpsInfo = results.lpsDetails ? `
+DETALHES DO SPDA RECOMENDADO:
+Nível de Proteção: Classe ${['I', 'II', 'III', 'IV'][results.lpsDetails.nivel - 1]}
+Dimensão da Malha: ${results.lpsDetails.malha}x${results.lpsDetails.malha}m
+Raio da Esfera Rolante: ${results.lpsDetails.esfera}m
+Distância entre Descidas: ${results.lpsDetails.distanciaDescidas}m
+Número Mínimo de Descidas: ${results.lpsDetails.numDescidasMinimo}
+` : '';
 
     const text = `
 RELATÓRIO DE GERENCIAMENTO DE RISCO SPDA
@@ -1010,7 +1299,7 @@ R1 - Vidas Humanas: ${results.R1.toExponential(3)} | ${results.Rt.R1.toExponenti
 R2 - Danos Físicos: ${results.R2.toExponential(3)} | ${results.Rt.R2.toExponential(3)} | ${results.aceitavel.R2 ? 'ACEITÁVEL' : 'CRÍTICO'}
 R3 - Falhas Sistemas: ${results.R3.toExponential(3)} | ${results.Rt.R3.toExponential(3)} | ${results.aceitavel.R3 ? 'ACEITÁVEL' : 'CRÍTICO'}
 R4 - Perda Econômica: ${results.R4.toExponential(3)} | ${results.Rt.R4.toExponential(3)} | ${results.aceitavel.R4 ? 'ACEITÁVEL' : 'CRÍTICO'}
-
+${lpsInfo}
 4. DETALHAMENTO DOS COMPONENTES DE RISCO
 RA: ${results.componentes.RA.toExponential(3)} (Choque - direta estrutura)
 RB: ${results.componentes.RB.toExponential(3)} (Danos físicos - direta estrutura)
@@ -1032,169 +1321,259 @@ ${conclusion}
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <button onClick={onBack} className="text-zinc-500 hover:text-zinc-900 flex items-center gap-1">
-          <ChevronRight className="rotate-180" size={20} />
-          Voltar
-        </button>
-        <button 
-          onClick={copyToClipboard}
-          className={`flex items-center gap-2 py-2 px-4 rounded-lg font-semibold transition-all ${
-            copied ? 'bg-emerald-600 text-white' : 'bg-zinc-900 text-white hover:bg-zinc-800'
-          }`}
-        >
-          {copied ? <CheckCircle size={20} /> : <Clipboard size={20} />}
-          {copied ? 'Copiado!' : 'Copiar Relatório'}
-        </button>
+      <div className="flex flex-col gap-4 mb-6 print:hidden">
+        <div className="flex justify-between items-center">
+          <button onClick={onBack} className="text-zinc-500 hover:text-zinc-900 flex items-center gap-1">
+            <ChevronRight className="rotate-180" size={20} />
+            Voltar
+          </button>
+          <div className="flex flex-wrap gap-2">
+            <button 
+              onClick={copyToClipboard}
+              className={`flex items-center gap-2 py-2 px-4 rounded-lg font-semibold transition-all ${
+                copied ? 'bg-emerald-600 text-white' : 'bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50'
+              }`}
+            >
+              {copied ? <CheckCircle size={18} /> : <Clipboard size={18} />}
+              <span className="text-xs">{copied ? 'Copiado!' : 'Copiar Texto'}</span>
+            </button>
+            <button 
+              onClick={handlePrint}
+              className="flex items-center gap-2 py-2 px-4 rounded-lg font-semibold bg-white text-zinc-700 border border-zinc-200 hover:bg-zinc-50 transition-all"
+            >
+              <Printer size={18} />
+              <span className="text-xs">Imprimir</span>
+            </button>
+            <button 
+              onClick={exportToPDF}
+              className="flex items-center gap-2 py-2 px-4 rounded-lg font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-all shadow-sm"
+            >
+              <Download size={18} />
+              <span className="text-xs">Exportar PDF</span>
+            </button>
+          </div>
+        </div>
+        
+        <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-xl flex items-start gap-3">
+          <Info size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+          <p className="text-[10px] text-emerald-800 leading-relaxed">
+            A função de imprimir e exportar para PDF funcionarão somente na versão web no link: 
+            <a 
+              href="https://riscopro2026.vercel.app" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-emerald-600 font-bold hover:underline ml-1 inline-flex items-center gap-0.5"
+            >
+              https://riscopro2026.vercel.app
+              <ExternalLink size={10} />
+            </a>
+          </p>
+        </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-zinc-100 p-8 space-y-8">
-        <div className="text-center border-b border-zinc-100 pb-8">
-          <h1 className="text-3xl font-bold text-zinc-900 mb-2">Resultado da Análise</h1>
-          <p className="text-zinc-500">Memória de cálculo conforme NBR 5419-2:2026</p>
-        </div>
+      <div ref={reportRef} id="report-content" className="space-y-8">
+        {/* PAGE 1 */}
+        <div className="bg-white rounded-2xl shadow-sm border border-zinc-100 p-8 space-y-8 text-zinc-900 pdf-page">
+          <div className="text-center border-b border-zinc-100 pb-8">
+            <h1 className="text-3xl font-bold text-zinc-900 mb-2">Resultado da Análise</h1>
+            <p className="text-zinc-500">Memória de cálculo conforme NBR 5419-2:2026</p>
+          </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="space-y-4">
-            <h3 className="font-bold text-zinc-900 flex items-center gap-2">
-              <Info size={18} className="text-emerald-600" />
-              1. Identificação
-            </h3>
-            <div className="bg-zinc-50 rounded-xl p-4 space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-zinc-500">Cliente:</span> <span className="font-semibold">{report.client}</span></div>
-              <div className="flex justify-between"><span className="text-zinc-500">Endereço:</span> <span className="font-semibold">{report.address}</span></div>
-              <div className="flex justify-between"><span className="text-zinc-500">Data:</span> <span className="font-semibold">{format(new Date(report.createdAt), 'dd/MM/yyyy HH:mm')}</span></div>
-              {report.observations && (
-                <div className="pt-2 border-t border-zinc-200 mt-2">
-                  <span className="text-zinc-500 block mb-1">Observações:</span>
-                  <p className="text-zinc-700 italic">{report.observations}</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-4">
+              <h3 className="font-bold text-zinc-900 flex items-center gap-2">
+                <Info size={18} className="text-emerald-600" />
+                1. Identificação
+              </h3>
+              <div className="bg-zinc-50 rounded-xl p-4 space-y-2 text-sm">
+                <div className="flex justify-between"><span className="text-zinc-500">Cliente:</span> <span className="font-semibold text-zinc-900">{report.client}</span></div>
+                <div className="flex justify-between"><span className="text-zinc-500">Endereço:</span> <span className="font-semibold text-zinc-900">{report.address}</span></div>
+                <div className="flex justify-between"><span className="text-zinc-500">Data:</span> <span className="font-semibold text-zinc-900">{format(new Date(report.createdAt), 'dd/MM/yyyy HH:mm')}</span></div>
+                {report.observations && (
+                  <div className="pt-2 border-t border-zinc-200 mt-2">
+                    <span className="text-zinc-500 block mb-1">Observações:</span>
+                    <p className="text-zinc-700 italic">{report.observations}</p>
+                  </div>
+                )}
+              </div>
+              
+              <div className="bg-zinc-900 rounded-2xl overflow-hidden border border-zinc-200 shadow-md">
+                <Building3D 
+                  width={report.inputs.comprimento} 
+                  length={report.inputs.largura} 
+                  height={report.inputs.altura} 
+                  lpsDetails={report.results.lpsDetails}
+                  lpsType={lpsType}
+                />
+                {report.results.lpsDetails && (
+                  <div className="p-3 bg-zinc-50 border-t border-zinc-100 flex justify-center gap-2" data-html2canvas-ignore="true">
+                    <button 
+                      onClick={() => setLpsType('malha')}
+                      className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all ${lpsType === 'malha' ? 'bg-emerald-600 text-white' : 'bg-white text-zinc-500 border border-zinc-200 hover:bg-zinc-50'}`}
+                    >
+                      MALHA
+                    </button>
+                    <button 
+                      onClick={() => setLpsType('esfera')}
+                      className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all ${lpsType === 'esfera' ? 'bg-emerald-600 text-white' : 'bg-white text-zinc-500 border border-zinc-200 hover:bg-zinc-50'}`}
+                    >
+                      ESFERA
+                    </button>
+                    <button 
+                      onClick={() => setLpsType('faraday')}
+                      className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all ${lpsType === 'faraday' ? 'bg-emerald-600 text-white' : 'bg-white text-zinc-500 border border-zinc-200 hover:bg-zinc-50'}`}
+                    >
+                      GAIOLA
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="font-bold text-zinc-900 flex items-center gap-2">
+                <ShieldCheck size={18} className="text-emerald-600" />
+                Conclusão Normativa (NBR 5419-2:2026)
+              </h3>
+              <div className={`p-6 rounded-xl border-2 flex flex-col items-center justify-center text-center ${
+                report.results.aceitavel.R1 ? 'bg-green-50 border-green-100 text-green-800' : 'bg-red-50 border-red-100 text-red-800'
+              }`}>
+                {report.results.aceitavel.R1 ? (
+                  <>
+                    <CheckCircle size={40} className="mb-2" />
+                    <p className="font-bold text-lg">RISCO ACEITÁVEL</p>
+                    <p className="text-xs opacity-80">SPDA não obrigatório por R1</p>
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle size={40} className="mb-2" />
+                    <p className="font-bold text-lg">RISCO CRÍTICO</p>
+                    <p className="text-xs opacity-80">Requer {report.results.classeSPDA}</p>
+                  </>
+                )}
+              </div>
+
+              {report.results.lpsDetails && (
+                <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl">
+                  <h4 className="text-xs font-bold text-emerald-900 mb-2 flex items-center gap-2">
+                    <ShieldCheck size={16} />
+                    Configuração Recomendada
+                  </h4>
+                  <div className="grid grid-cols-2 gap-y-2 text-[10px] text-emerald-800">
+                    <div className="flex justify-between pr-4 border-r border-emerald-200"><span>Malha:</span> <strong>{report.results.lpsDetails.malha}x{report.results.lpsDetails.malha}m</strong></div>
+                    <div className="flex justify-between pl-4"><span>Esfera:</span> <strong>{report.results.lpsDetails.esfera}m</strong></div>
+                    <div className="flex justify-between pr-4 border-r border-emerald-200"><span>Descidas:</span> <strong>{report.results.lpsDetails.distanciaDescidas}m</strong></div>
+                    <div className="flex justify-between pl-4"><span>Mín. Descidas:</span> <strong>{report.results.lpsDetails.numDescidasMinimo}</strong></div>
+                  </div>
                 </div>
               )}
+
+              <div className="bg-zinc-50 rounded-xl p-4 space-y-2 text-xs">
+                <h4 className="font-bold text-zinc-900 mb-2">2. Dados da Estrutura</h4>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                  <div className="flex justify-between"><span className="text-zinc-500">Dimensões:</span> <span className="font-semibold text-zinc-900">{report.inputs.comprimento}x{report.inputs.largura}x{report.inputs.altura}m</span></div>
+                  <div className="flex justify-between"><span className="text-zinc-500">Material:</span> <span className="font-semibold text-zinc-900">{report.inputs.materialConstrucao}</span></div>
+                  <div className="flex justify-between"><span className="text-zinc-500">Cobertura:</span> <span className="font-semibold text-zinc-900">{report.inputs.tipoCobertura}</span></div>
+                  <div className="flex justify-between"><span className="text-zinc-500">Risco Incêndio:</span> <span className="font-semibold text-zinc-900">{report.inputs.riscoIncendio}</span></div>
+                  <div className="flex justify-between"><span className="text-zinc-500">Ng:</span> <span className="font-semibold text-zinc-900">{report.inputs.ng}</span></div>
+                  <div className="flex justify-between"><span className="text-zinc-500">Solo (Uw):</span> <span className="font-semibold text-zinc-900">{report.inputs.resitividadeSolo}Ωm</span></div>
+                  <div className="flex justify-between"><span className="text-zinc-500">Ocupação:</span> <span className="font-semibold text-zinc-900">{report.inputs.numPessoas}</span></div>
+                  <div className="flex justify-between"><span className="text-zinc-500">DPS:</span> <span className="font-semibold text-zinc-900">{report.inputs.sistemasMetalicos ? 'Sim' : 'Não'}</span></div>
+                </div>
+                <div className="pt-2 border-t border-zinc-200 mt-2">
+                  <p className="text-[9px] text-zinc-400 uppercase font-bold mb-1">Valores Econômicos (R$)</p>
+                  <div className="grid grid-cols-2 gap-x-4 text-[10px]">
+                    <div className="flex justify-between"><span className="text-zinc-500">Estrutura:</span> <span className="font-semibold">{report.inputs.valorEstrutura?.toLocaleString()}</span></div>
+                    <div className="flex justify-between"><span className="text-zinc-500">Conteúdo:</span> <span className="font-semibold">{report.inputs.valorConteudo?.toLocaleString()}</span></div>
+                    <div className="flex justify-between"><span className="text-zinc-500">Sistemas:</span> <span className="font-semibold">{report.inputs.valorSistemas?.toLocaleString()}</span></div>
+                    <div className="flex justify-between"><span className="text-zinc-500">Atividade:</span> <span className="font-semibold">{report.inputs.valorAtividade?.toLocaleString()}</span></div>
+                  </div>
+                </div>
+              </div>
             </div>
-            
-            <Building3D 
-              width={report.inputs.largura} 
-              length={report.inputs.comprimento} 
-              height={report.inputs.altura} 
-            />
           </div>
 
           <div className="space-y-4">
-            <h3 className="font-bold text-zinc-900 flex items-center gap-2">
-              <ShieldCheck size={18} className="text-emerald-600" />
-              Conclusão Normativa (NBR 5419-2:2026)
-            </h3>
-            <div className={`p-6 rounded-xl border-2 flex flex-col items-center justify-center text-center ${
-              report.results.aceitavel.R1 ? 'bg-green-50 border-green-100 text-green-800' : 'bg-red-50 border-red-100 text-red-800'
-            }`}>
-              {report.results.aceitavel.R1 ? (
-                <>
-                  <CheckCircle size={40} className="mb-2" />
-                  <p className="font-bold text-lg">RISCO ACEITÁVEL</p>
-                  <p className="text-xs opacity-80">SPDA não obrigatório por R1</p>
-                </>
-              ) : (
-                <>
-                  <AlertTriangle size={40} className="mb-2" />
-                  <p className="font-bold text-lg">RISCO CRÍTICO</p>
-                  <p className="text-xs opacity-80">Requer {report.results.classeSPDA}</p>
-                </>
-              )}
-            </div>
-
-            <div className="bg-zinc-50 rounded-xl p-4 space-y-2 text-xs">
-              <h4 className="font-bold text-zinc-900 mb-2">2. Dados da Estrutura</h4>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                <div className="flex justify-between"><span className="text-zinc-500">Dimensões:</span> <span className="font-semibold">{report.inputs.comprimento}x{report.inputs.largura}x{report.inputs.altura}m</span></div>
-                <div className="flex justify-between"><span className="text-zinc-500">Material:</span> <span className="font-semibold">{report.inputs.materialConstrucao}</span></div>
-                <div className="flex justify-between"><span className="text-zinc-500">Cobertura:</span> <span className="font-semibold">{report.inputs.tipoCobertura}</span></div>
-                <div className="flex justify-between"><span className="text-zinc-500">Risco Incêndio:</span> <span className="font-semibold">{report.inputs.riscoIncendio}</span></div>
-                <div className="flex justify-between"><span className="text-zinc-500">Ng:</span> <span className="font-semibold">{report.inputs.ng}</span></div>
-                <div className="flex justify-between"><span className="text-zinc-500">Solo (Uw):</span> <span className="font-semibold">{report.inputs.resitividadeSolo}Ωm</span></div>
-                <div className="flex justify-between"><span className="text-zinc-500">Ocupação:</span> <span className="font-semibold">{report.inputs.numPessoas}</span></div>
-                <div className="flex justify-between"><span className="text-zinc-500">DPS:</span> <span className="font-semibold">{report.inputs.sistemasMetalicos ? 'Sim' : 'Não'}</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <h3 className="font-bold text-zinc-900">3. Riscos Calculados (R) vs Toleráveis (Rt)</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-zinc-50 text-zinc-500 uppercase text-[10px] font-bold">
-                <tr>
-                  <th className="p-3">Componente de Risco</th>
-                  <th className="p-3">Valor R</th>
-                  <th className="p-3">Limite Rt</th>
-                  <th className="p-3">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100">
-                {[
-                  { label: 'R1 - Perda de Vidas Humanas', val: report.results.R1, rt: report.results.Rt.R1, ok: report.results.aceitavel.R1 },
-                  { label: 'R2 - Danos Físicos', val: report.results.R2, rt: report.results.Rt.R2, ok: report.results.aceitavel.R2 },
-                  { label: 'R3 - Falhas de Sistemas', val: report.results.R3, rt: report.results.Rt.R3, ok: report.results.aceitavel.R3 },
-                  { label: 'R4 - Perdas Econômicas', val: report.results.R4, rt: report.results.Rt.R4, ok: report.results.aceitavel.R4 }
-                ].map((r, i) => (
-                  <tr key={i}>
-                    <td className="p-3 font-medium">{r.label}</td>
-                    <td className="p-3 font-mono">{r.val.toExponential(3)}</td>
-                    <td className="p-3 font-mono">{r.rt.toExponential(3)}</td>
-                    <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.ok ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {r.ok ? 'OK' : 'EXCEDE'}
-                      </span>
-                    </td>
+            <h3 className="font-bold text-zinc-900">3. Riscos Calculados (R) vs Toleráveis (Rt)</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-zinc-50 text-zinc-500 uppercase text-[10px] font-bold">
+                  <tr>
+                    <th className="p-3">Componente de Risco</th>
+                    <th className="p-3">Valor R</th>
+                    <th className="p-3">Limite Rt</th>
+                    <th className="p-3">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <h3 className="font-bold text-zinc-900">4. Detalhamento dos Componentes de Risco</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-zinc-50 rounded-xl p-4 overflow-hidden">
-              <h4 className="text-[10px] font-bold text-zinc-400 uppercase mb-3">Descargas Diretas (Estrutura)</h4>
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between"><span>RA (Choque):</span> <span className="font-mono">{report.results.componentes.RA.toExponential(3)}</span></div>
-                <div className="flex justify-between"><span>RB (Danos Físicos):</span> <span className="font-mono">{report.results.componentes.RB.toExponential(3)}</span></div>
-                <div className="flex justify-between"><span>RC (Sistemas):</span> <span className="font-mono">{report.results.componentes.RC.toExponential(3)}</span></div>
-              </div>
-            </div>
-            <div className="bg-zinc-50 rounded-xl p-4 overflow-hidden">
-              <h4 className="text-[10px] font-bold text-zinc-400 uppercase mb-3">Descargas Próximas (Estrutura)</h4>
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between"><span>RM (Sistemas):</span> <span className="font-mono">{report.results.componentes.RM.toExponential(3)}</span></div>
-              </div>
-            </div>
-            <div className="bg-zinc-50 rounded-xl p-4 overflow-hidden">
-              <h4 className="text-[10px] font-bold text-zinc-400 uppercase mb-3">Descargas Diretas (Linha)</h4>
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between"><span>RU (Choque):</span> <span className="font-mono">{report.results.componentes.RU.toExponential(3)}</span></div>
-                <div className="flex justify-between"><span>RV (Danos Físicos):</span> <span className="font-mono">{report.results.componentes.RV.toExponential(3)}</span></div>
-                <div className="flex justify-between"><span>RW (Sistemas):</span> <span className="font-mono">{report.results.componentes.RW.toExponential(3)}</span></div>
-              </div>
-            </div>
-            <div className="bg-zinc-50 rounded-xl p-4 overflow-hidden">
-              <h4 className="text-[10px] font-bold text-zinc-400 uppercase mb-3">Descargas Próximas (Linha)</h4>
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between"><span>RZ (Sistemas):</span> <span className="font-mono">{report.results.componentes.RZ.toExponential(3)}</span></div>
-              </div>
+                </thead>
+                <tbody className="divide-y divide-zinc-100">
+                  {[
+                    { label: 'R1 - Perda de Vidas Humanas', val: report.results.R1, rt: report.results.Rt.R1, ok: report.results.aceitavel.R1 },
+                    { label: 'R2 - Danos Físicos', val: report.results.R2, rt: report.results.Rt.R2, ok: report.results.aceitavel.R2 },
+                    { label: 'R3 - Falhas de Sistemas', val: report.results.R3, rt: report.results.Rt.R3, ok: report.results.aceitavel.R3 },
+                    { label: 'R4 - Perdas Econômicas', val: report.results.R4, rt: report.results.Rt.R4, ok: report.results.aceitavel.R4 }
+                  ].map((r, i) => (
+                    <tr key={i}>
+                      <td className="p-3 font-medium">{r.label}</td>
+                      <td className="p-3 font-mono">{r.val.toExponential(3)}</td>
+                      <td className="p-3 font-mono">{r.rt.toExponential(3)}</td>
+                      <td className="p-3">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.ok ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                          {r.ok ? 'OK' : 'EXCEDE'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
 
-        <div className="pt-8 border-t border-zinc-100">
-          <h3 className="font-bold text-zinc-900 mb-4">5. Conclusão Técnica</h3>
-          <div className="bg-zinc-900 text-zinc-100 p-6 rounded-2xl">
-            <p className="text-sm leading-relaxed italic">
-              {report.results.aceitavel.R1 
-                ? 'Com base nos cálculos realizados, o risco R1 é inferior ao risco tolerável normativo. A instalação de SPDA não é obrigatória por critério de risco de vida, porém recomenda-se avaliação de danos físicos (R2).'
-                : `O risco calculado excede os limites toleráveis da NBR 5419-2. É OBRIGATÓRIA a instalação de um sistema de proteção contra descargas atmosféricas (SPDA) de ${report.results.classeSPDA}.`}
-            </p>
+        {/* PAGE 2 */}
+        <div className="bg-white rounded-2xl shadow-sm border border-zinc-100 p-8 space-y-8 text-zinc-900 pdf-page page-break-before">
+          <div className="space-y-4">
+            <h3 className="font-bold text-zinc-900">4. Detalhamento dos Componentes de Risco</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-zinc-50 rounded-xl p-4 overflow-hidden">
+                <h4 className="text-[10px] font-bold text-zinc-400 uppercase mb-3">Descargas Diretas (Estrutura)</h4>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between"><span>RA (Choque):</span> <span className="font-mono">{report.results.componentes.RA.toExponential(3)}</span></div>
+                  <div className="flex justify-between"><span>RB (Danos Físicos):</span> <span className="font-mono">{report.results.componentes.RB.toExponential(3)}</span></div>
+                  <div className="flex justify-between"><span>RC (Sistemas):</span> <span className="font-mono">{report.results.componentes.RC.toExponential(3)}</span></div>
+                </div>
+              </div>
+              <div className="bg-zinc-50 rounded-xl p-4 overflow-hidden">
+                <h4 className="text-[10px] font-bold text-zinc-400 uppercase mb-3">Descargas Próximas (Estrutura)</h4>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between"><span>RM (Sistemas):</span> <span className="font-mono">{report.results.componentes.RM.toExponential(3)}</span></div>
+                </div>
+              </div>
+              <div className="bg-zinc-50 rounded-xl p-4 overflow-hidden">
+                <h4 className="text-[10px] font-bold text-zinc-400 uppercase mb-3">Descargas Diretas (Linha)</h4>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between"><span>RU (Choque):</span> <span className="font-mono">{report.results.componentes.RU.toExponential(3)}</span></div>
+                  <div className="flex justify-between"><span>RV (Danos Físicos):</span> <span className="font-mono">{report.results.componentes.RV.toExponential(3)}</span></div>
+                  <div className="flex justify-between"><span>RW (Sistemas):</span> <span className="font-mono">{report.results.componentes.RW.toExponential(3)}</span></div>
+                </div>
+              </div>
+              <div className="bg-zinc-50 rounded-xl p-4 overflow-hidden">
+                <h4 className="text-[10px] font-bold text-zinc-400 uppercase mb-3">Descargas Próximas (Linha)</h4>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between"><span>RZ (Sistemas):</span> <span className="font-mono">{report.results.componentes.RZ.toExponential(3)}</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-8 border-t border-zinc-100">
+            <h3 className="font-bold text-zinc-900 mb-4">5. Conclusão Técnica</h3>
+            <div className="bg-zinc-50 text-zinc-800 p-6 rounded-2xl border border-zinc-100">
+              <p className="text-sm leading-relaxed italic">
+                {report.results.aceitavel.R1 
+                  ? 'Com base nos cálculos realizados, o risco R1 é inferior ao risco tolerável normativo. A instalação de SPDA não é obrigatória por critério de risco de vida, porém recomenda-se avaliação de danos físicos (R2).'
+                  : `O risco calculado excede os limites toleráveis da NBR 5419-2. É OBRIGATÓRIA a instalação de um sistema de proteção contra descargas atmosféricas (SPDA) de ${report.results.classeSPDA}.`}
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -1269,7 +1648,7 @@ const AdminDashboard = ({ onBack }: any) => {
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left">
-                <thead className="text-[10px] font-bold text-zinc-400 uppercase bg-zinc-50/50">
+                <thead className="text-[10px] font-bold text-zinc-400 uppercase bg-[#fafafa80]">
                   <tr>
                     <th className="p-4">Usuário</th>
                     <th className="p-4">Status</th>
@@ -1500,7 +1879,7 @@ export default function App() {
   );
 
   if (!user) return <Login />;
-  if (!profile) return <div className="p-8 text-center">Carregando perfil...</div>;
+  if (!profile) return <div className="p-8 text-center text-zinc-500">Carregando perfil...</div>;
 
   return (
     <div className="min-h-screen bg-zinc-50 flex flex-col">
@@ -1543,10 +1922,10 @@ export default function App() {
                 <span className="hidden md:inline text-sm font-semibold">Admin</span>
               </button>
             )}
-            <div className="h-6 w-px bg-zinc-100 mx-2"></div>
+            <div className="h-6 w-px bg-zinc-200 mx-2"></div>
             <button 
               onClick={() => signOut(auth)}
-              className="p-2 text-zinc-400 hover:text-red-600 transition-colors"
+              className="p-2 text-zinc-400 hover:text-red-500 transition-colors"
               title="Sair"
             >
               <LogOut size={20} />
@@ -1593,7 +1972,7 @@ export default function App() {
 
       {/* Location Explanation Modal */}
       {showLocationModal && (
-        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[200] bg-[#00000099] backdrop-blur-sm flex items-center justify-center p-4">
           <div className="max-w-md w-full bg-white rounded-2xl p-8 shadow-2xl animate-in fade-in zoom-in duration-200">
             <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mb-6 mx-auto">
               <MapPin size={32} />
@@ -1606,7 +1985,7 @@ export default function App() {
             </p>
             <button 
               onClick={handleDismissLocationModal}
-              className="w-full py-4 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 active:scale-95"
+              className="w-full py-4 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-[0_10px_15px_-3px_rgba(16,185,129,0.1),0_4px_6px_-4px_rgba(16,185,129,0.1)] active:scale-95"
             >
               Entendi e Aceito
             </button>
@@ -1616,7 +1995,7 @@ export default function App() {
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] bg-[#00000099] backdrop-blur-sm flex items-center justify-center p-4">
           <div className="max-w-sm w-full bg-white rounded-2xl p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
             <div className="w-12 h-12 bg-red-50 text-red-600 rounded-full flex items-center justify-center mb-4 mx-auto">
               <Trash2 size={24} />

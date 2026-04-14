@@ -38,6 +38,20 @@ export interface SPDAInputs {
   medidasCombateIncendio: string; // 'Nenhuma', 'Extintores', 'Hidrantes', 'Automático'
   tipoFioInterno: string; // 'Não blindado', 'Blindado', 'Blindagem pesada'
   tensaoSuportavel: number; // kV (Uw)
+
+  // Valores financeiros para R4 (Opcional)
+  valorEstrutura?: number;
+  valorConteudo?: number;
+  valorSistemas?: number;
+  valorAtividade?: number;
+}
+
+export interface LPSDetails {
+  nivel: number;
+  malha: number;
+  esfera: number;
+  distanciaDescidas: number;
+  numDescidasMinimo: number;
 }
 
 export interface SPDAResults {
@@ -58,6 +72,7 @@ export interface SPDAResults {
     R4: boolean;
   };
   classeSPDA: string;
+  lpsDetails?: LPSDetails;
   componentes: {
     RA: number;
     RB: number;
