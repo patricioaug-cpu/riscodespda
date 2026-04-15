@@ -1,5 +1,5 @@
 {
-  "name": "RiscoPro 2026 - Gerenciamento de Risco SPDA",
+  "name": "RiscoPro 2026 - Análise de Risco SPDA",
   "description": "Este aplicativo utiliza sua localização geográfica para estimar automaticamente o valor de Ng (densidade de descargas atmosféricas) da sua região, conforme a norma ABNT NBR 5419-2:2026.",
   "requestFramePermissions": ["geolocation"]
 }

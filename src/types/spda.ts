@@ -1,9 +1,26 @@
+export interface SPDAZone {
+  id: string;
+  nome: string;
+  numPessoas: number;
+  tempoPermanencia: number;
+  tipoAtividade: string;
+  medidasProtecaoContato: string;
+  riscoIncendio: string;
+  medidasCombateIncendio: string;
+  valorConteudo: number;
+  valorSistemas: number;
+  valorAtividade: number;
+  sistemasMetalicos: boolean;
+  blindagemEspacial: boolean;
+  tipoFioInterno: string;
+}
+
 export interface SPDAInputs {
   cliente: string;
   endereco: string;
   observacoes: string;
   
-  // Estrutura
+  // Estrutura (Global)
   tipoEstrutura: string;
   comprimento: number;
   largura: number;
@@ -11,36 +28,37 @@ export interface SPDAInputs {
   alturaMaior25m: boolean;
   materialConstrucao: string;
   tipoCobertura: string;
-  sistemasMetalicos: boolean;
   
-  // Localização
+  // Localização (Global)
   latitude: number;
   longitude: number;
-  ng: number; // Densidade de descargas
-  cd: number; // Fator de localização
-  
-  // Ocupação
-  numPessoas: number;
-  tempoPermanencia: number;
-  tipoAtividade: string;
-  
-  // Linhas Conectadas
+  ng: number;
+  cd: number;
+  resitividadeSolo: number;
+  estruturasVizinhas: boolean;
+
+  // Linhas Conectadas (Global)
   linhasEnergia: boolean;
   linhasTelecom: boolean;
   tubulacoesMetalicas: boolean;
-  estruturasVizinhas: boolean;
+  tensaoSuportavel: number;
 
-  // Novos campos para NBR 5419-2:2015/2026
-  resitividadeSolo: number;
-  medidasProtecaoContato: string; // 'Nenhuma', 'Avisos', 'Isolamento', 'Barreiras'
-  blindagemEspacial: boolean;
-  riscoIncendio: string; // 'Baixo', 'Ordinário', 'Alto', 'Explosão'
-  medidasCombateIncendio: string; // 'Nenhuma', 'Extintores', 'Hidrantes', 'Automático'
-  tipoFioInterno: string; // 'Não blindado', 'Blindado', 'Blindagem pesada'
-  tensaoSuportavel: number; // kV (Uw)
-
-  // Valores financeiros para R4 (Opcional)
+  // Valor da Estrutura (Global)
   valorEstrutura?: number;
+
+  // Zonas
+  zonas: SPDAZone[];
+
+  // Campos legados (para compatibilidade)
+  numPessoas?: number;
+  tempoPermanencia?: number;
+  tipoAtividade?: string;
+  sistemasMetalicos?: boolean;
+  medidasProtecaoContato?: string;
+  blindagemEspacial?: boolean;
+  riscoIncendio?: string;
+  medidasCombateIncendio?: string;
+  tipoFioInterno?: string;
   valorConteudo?: number;
   valorSistemas?: number;
   valorAtividade?: number;
@@ -73,6 +91,23 @@ export interface SPDAResults {
   };
   classeSPDA: string;
   lpsDetails?: LPSDetails;
+  zoneResults?: {
+    nome: string;
+    R1: number;
+    R2: number;
+    R3: number;
+    R4: number;
+    componentes: {
+      RA: number;
+      RB: number;
+      RC: number;
+      RM: number;
+      RU: number;
+      RV: number;
+      RW: number;
+      RZ: number;
+    };
+  }[];
   componentes: {
     RA: number;
     RB: number;
@@ -91,6 +126,7 @@ export interface UserProfile {
   displayName: string;
   role: 'user' | 'admin';
   status: 'trial' | 'liberado' | 'bloqueado' | 'pendente';
+  deviceId?: string;
   trialStartDate: string;
   createdAt: string;
 }

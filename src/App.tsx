@@ -3,16 +3,17 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   auth, db, signOut, onAuthStateChanged, 
   sendPasswordResetEmail, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile,
-  doc, getDoc, setDoc, deleteDoc, collection, addDoc, query, where, onSnapshot, 
+  doc, getDoc, setDoc, deleteDoc, collection, addDoc, query, where, onSnapshot, getDocs,
   handleFirestoreError, OperationType 
 } from './firebase';
 import { UserProfile, SPDAReport, SPDAInputs, SPDAResults } from './types/spda';
 import { calculateSPDARisk } from './lib/spda-engine';
+import { getDeviceId } from './lib/fingerprint';
 import { 
   LayoutDashboard, FileText, PlusCircle, LogOut, ShieldCheck, 
   HelpCircle, AlertTriangle, CheckCircle, ChevronRight, User, 
   Settings, Trash2, Clipboard, Info, RotateCcw, Loader2,
-  Printer, Download, ExternalLink
+  Printer, Download, ExternalLink, Layers, Plus
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -60,10 +61,40 @@ const Login = () => {
   };
 
   const syncUser = async (user: any) => {
+    const deviceId = await getDeviceId();
     const userRef = doc(db, 'users', user.uid);
     const userSnap = await getDoc(userRef);
     const isAdmin = user.email === 'patricioaug@gmail.com';
     
+    // Check if this device has already been used for an expired trial
+    if (!isAdmin) {
+      const q = query(collection(db, 'users'), where('deviceId', '==', deviceId));
+      const querySnap = await getDocs(q);
+      
+      let deviceBlocked = false;
+      querySnap.forEach((doc: any) => {
+        const data = doc.data() as UserProfile;
+        if (data.uid !== user.uid) {
+          const daysUsed = differenceInDays(new Date(), new Date(data.trialStartDate));
+          if (daysUsed >= 7 && data.status !== 'liberado') {
+            deviceBlocked = true;
+          }
+        }
+      });
+
+      if (deviceBlocked) {
+        // If device is blocked, set this user to blocked too
+        if (!userSnap.exists() || (userSnap.data() as UserProfile).status === 'trial') {
+          await setDoc(userRef, { 
+            status: 'bloqueado',
+            deviceId: deviceId,
+            observations: 'Bloqueado por uso múltiplo de trial no mesmo dispositivo.'
+          }, { merge: true });
+          return;
+        }
+      }
+    }
+
     if (!userSnap.exists()) {
       const newUser: UserProfile = {
         uid: user.uid,
@@ -71,22 +102,28 @@ const Login = () => {
         displayName: user.displayName || name || '',
         role: isAdmin ? 'admin' : 'user',
         status: isAdmin ? 'liberado' : 'trial',
+        deviceId: deviceId,
         trialStartDate: new Date().toISOString(),
         createdAt: new Date().toISOString()
       };
       await setDoc(userRef, newUser);
-    } else if (isAdmin) {
-      // Ensure admin always has correct role and status
-      await setDoc(userRef, { 
-        role: 'admin', 
-        status: 'liberado' 
-      }, { merge: true });
+    } else {
+      // Update deviceId if not set
+      const data = userSnap.data() as UserProfile;
+      if (!data.deviceId || isAdmin) {
+        await setDoc(userRef, { 
+          deviceId: deviceId,
+          role: isAdmin ? 'admin' : data.role,
+          status: isAdmin ? 'liberado' : data.status
+        }, { merge: true });
+      }
     }
     
     await addDoc(collection(db, 'loginHistory'), {
       userId: user.uid,
       email: user.email,
       displayName: user.displayName || name,
+      deviceId: deviceId,
       timestamp: new Date().toISOString()
     });
   };
@@ -100,7 +137,7 @@ const Login = () => {
           </div>
           <h1 className="text-3xl font-bold text-zinc-900">RiscoPro 2026</h1>
           <p className="text-zinc-500">
-            Gerenciamento de Risco SPDA (NBR 5419-2:2026)
+            Análise de Risco SPDA (NBR 5419-2:2026)
           </p>
         </div>
 
@@ -202,14 +239,18 @@ const TrialBanner = ({ user }: { user: UserProfile }) => {
   }
 
   if (isExpired) {
+    const isBlocked = user.status === 'bloqueado';
     return (
       <div className="fixed inset-0 z-50 bg-[#000000cc] backdrop-blur-sm flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-2xl p-8 text-center">
           <AlertTriangle className="mx-auto text-emerald-600 mb-4" size={48} />
-          <h2 className="text-2xl font-bold text-zinc-900 mb-4">Período de Avaliação Encerrado</h2>
+          <h2 className="text-2xl font-bold text-zinc-900 mb-4">
+            {isBlocked ? 'Acesso Bloqueado' : 'Período de Avaliação Encerrado'}
+          </h2>
           <p className="text-zinc-600 mb-6">
-            Seu período de avaliação de 7 dias terminou. 
-            Clique no botão abaixo para solicitar a liberação do acesso.
+            {isBlocked 
+              ? 'Identificamos que este dispositivo já utilizou o período de avaliação. Para continuar utilizando o sistema, solicite a liberação do acesso.'
+              : 'Seu período de avaliação de 7 dias terminou. Clique no botão abaixo para solicitar a liberação do acesso.'}
           </p>
           <div className="space-y-3">
             <button 
@@ -250,7 +291,7 @@ const Dashboard = ({ user, onNewReport, onEditReport, onViewReport, reports, set
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">Meus Relatórios</h1>
-          <p className="text-zinc-500 text-sm">Gerenciamento de Risco SPDA (NBR 5419-2:2026)</p>
+          <p className="text-zinc-500 text-sm">Análise de Risco SPDA (NBR 5419-2:2026)</p>
         </div>
         <button 
           onClick={onNewReport}
@@ -265,7 +306,7 @@ const Dashboard = ({ user, onNewReport, onEditReport, onViewReport, reports, set
         <div className="bg-white border-2 border-dashed border-zinc-100 rounded-2xl p-12 text-center">
           <FileText className="mx-auto text-zinc-200 mb-4" size={48} />
           <h3 className="text-lg font-semibold text-zinc-900 mb-1">Nenhum relatório encontrado</h3>
-          <p className="text-zinc-500 mb-6">Comece criando seu primeiro gerenciamento de risco.</p>
+          <p className="text-zinc-500 mb-6">Comece criando sua primeira análise de risco.</p>
           <button 
             onClick={onNewReport}
             className="text-emerald-600 font-semibold hover:underline"
@@ -328,6 +369,8 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
   const [calcStatus, setCalcStatus] = useState('');
   const [calcProgress, setCalcProgress] = useState(0);
   const [showNgMap, setShowNgMap] = useState(false);
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+  const [showZoneConfirm, setShowZoneConfirm] = useState(false);
   const [formData, setFormData] = useState<SPDAInputs>(() => {
     const base = report?.inputs || {
       cliente: '',
@@ -340,36 +383,41 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
       alturaMaior25m: false,
       materialConstrucao: 'Concreto',
       tipoCobertura: 'Telha Cerâmica',
-      sistemasMetalicos: false,
       latitude: 0,
       longitude: 0,
       ng: 5,
       cd: 1,
-      numPessoas: 10,
-      tempoPermanencia: 8,
-      tipoAtividade: 'Comercial',
+      resitividadeSolo: 500,
+      estruturasVizinhas: false,
       linhasEnergia: true,
       linhasTelecom: true,
       tubulacoesMetalicas: false,
-      estruturasVizinhas: false,
-      resitividadeSolo: 500,
-      medidasProtecaoContato: 'Nenhuma',
-      blindagemEspacial: false,
-      riscoIncendio: 'Baixo',
-      medidasCombateIncendio: 'Nenhuma',
-      tipoFioInterno: 'Não blindado',
       tensaoSuportavel: 2.5,
       valorEstrutura: 1000000,
-      valorConteudo: 500000,
-      valorSistemas: 200000,
-      valorAtividade: 100000
+      zonas: [
+        {
+          id: 'z1',
+          nome: 'Zona 1',
+          numPessoas: 10,
+          tempoPermanencia: 8,
+          tipoAtividade: 'Comercial',
+          medidasProtecaoContato: 'Nenhuma',
+          riscoIncendio: 'Baixo',
+          medidasCombateIncendio: 'Nenhuma',
+          valorConteudo: 500000,
+          valorSistemas: 200000,
+          valorAtividade: 100000,
+          sistemasMetalicos: false,
+          blindagemEspacial: false,
+          tipoFioInterno: 'Não blindado'
+        }
+      ]
     };
 
     // Sanitize numeric fields to prevent NaN
     const sanitized = { ...base };
     const numericFields: (keyof SPDAInputs)[] = [
-      'comprimento', 'largura', 'altura', 'latitude', 'longitude', 'ng', 'cd', 'numPessoas', 'tempoPermanencia',
-      'resitividadeSolo', 'tensaoSuportavel', 'valorEstrutura', 'valorConteudo', 'valorSistemas', 'valorAtividade'
+      'comprimento', 'largura', 'altura', 'latitude', 'longitude', 'ng', 'cd', 'resitividadeSolo', 'tensaoSuportavel', 'valorEstrutura'
     ];
     numericFields.forEach(field => {
       if (typeof sanitized[field] === 'number' && isNaN(sanitized[field] as number)) {
@@ -385,6 +433,50 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
       ...prev,
       [name]: type === 'checkbox' ? checked : (type === 'number' ? (value === '' ? 0 : parseFloat(value) || 0) : value)
     }));
+  };
+
+  const handleZoneChange = (zoneId: string, e: any) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      zonas: prev.zonas.map(z => z.id === zoneId ? {
+        ...z,
+        [name]: type === 'checkbox' ? checked : (type === 'number' ? (value === '' ? 0 : parseFloat(value) || 0) : value)
+      } : z)
+    }));
+  };
+
+  const handleAddZone = () => {
+    const newId = Math.random().toString(36).substr(2, 9);
+    setFormData(prev => ({
+      ...prev,
+      zonas: [...prev.zonas, {
+        id: newId,
+        nome: `Zona ${prev.zonas.length + 1}`,
+        numPessoas: 1,
+        tempoPermanencia: 1,
+        tipoAtividade: 'Comercial',
+        medidasProtecaoContato: 'Nenhuma',
+        riscoIncendio: 'Baixo',
+        medidasCombateIncendio: 'Nenhuma',
+        valorConteudo: 0,
+        valorSistemas: 0,
+        valorAtividade: 0,
+        sistemasMetalicos: false,
+        blindagemEspacial: false,
+        tipoFioInterno: 'Não blindado'
+      }]
+    }));
+    setSelectedZoneId(newId);
+  };
+
+  const handleRemoveZone = (zoneId: string) => {
+    if (formData.zonas.length <= 1) return;
+    setFormData(prev => ({
+      ...prev,
+      zonas: prev.zonas.filter(z => z.id !== zoneId)
+    }));
+    if (selectedZoneId === zoneId) setSelectedZoneId(null);
   };
 
   const handleCalculate = async () => {
@@ -423,7 +515,7 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
     { id: 1, title: 'Identificação', icon: User },
     { id: 2, title: 'Estrutura', icon: ShieldCheck },
     { id: 3, title: 'Localização', icon: Info },
-    { id: 4, title: 'Ocupação', icon: User },
+    { id: 4, title: 'Zonas de Risco', icon: Layers },
     { id: 5, title: 'Revisão', icon: CheckCircle }
   ];
 
@@ -570,37 +662,25 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 mb-1">Risco de Incêndio</label>
-                  <select name="riscoIncendio" value={formData.riscoIncendio} onChange={handleChange} className="w-full p-2 border border-zinc-200 rounded-lg">
-                    <option>Baixo</option>
-                    <option>Ordinário</option>
-                    <option>Alto</option>
-                    <option>Explosão</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 mb-1">Medidas de Combate</label>
-                  <select name="medidasCombateIncendio" value={formData.medidasCombateIncendio} onChange={handleChange} className="w-full p-2 border border-zinc-200 rounded-lg">
-                    <option>Nenhuma</option>
-                    <option>Extintores</option>
-                    <option>Hidrantes</option>
-                    <option>Automático</option>
-                  </select>
-                </div>
+              <div className="bg-zinc-50 p-4 rounded-xl border border-zinc-100">
+                <label className="block text-sm font-medium text-zinc-700 mb-1">Valor Total da Estrutura (R$)</label>
+                <input 
+                  type="number" 
+                  name="valorEstrutura" 
+                  value={formData.valorEstrutura} 
+                  onChange={handleChange} 
+                  className="w-full p-2 border border-zinc-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none" 
+                  placeholder="Ex: 1.000.000"
+                />
+                <p className="text-[10px] text-zinc-500 mt-1">Este valor é global para a estrutura e será usado no cálculo do risco R4.</p>
+              </div>
+              <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-xl border border-blue-100 text-blue-700 text-xs">
+                <Info size={18} />
+                <p>Os dados de ocupação, risco de incêndio e valores de bens serão configurados individualmente para cada zona no Passo 4.</p>
               </div>
               <div className="space-y-2 mt-4">
                 <h3 className="text-sm font-bold text-zinc-700">Características Adicionais</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <label className="flex items-center gap-2 p-2 border border-zinc-100 rounded-lg hover:bg-zinc-50 cursor-pointer transition-colors">
-                    <input type="checkbox" name="sistemasMetalicos" checked={formData.sistemasMetalicos} onChange={handleChange} />
-                    <span className="text-xs text-zinc-600">Sistemas Internos (DPS)</span>
-                  </label>
-                  <label className="flex items-center gap-2 p-2 border border-zinc-100 rounded-lg hover:bg-zinc-50 cursor-pointer transition-colors">
-                    <input type="checkbox" name="blindagemEspacial" checked={formData.blindagemEspacial} onChange={handleChange} />
-                    <span className="text-xs text-zinc-600">Blindagem Espacial (Gaiola)</span>
-                  </label>
                   <label className="flex items-center gap-2 p-2 border border-zinc-100 rounded-lg hover:bg-zinc-50 cursor-pointer transition-colors">
                     <input type="checkbox" name="tubulacoesMetalicas" checked={formData.tubulacoesMetalicas} onChange={handleChange} />
                     <span className="text-xs text-zinc-600">Tubulações Metálicas</span>
@@ -678,81 +758,230 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
                     <span className="text-xs">Linhas de Telecom</span>
                   </label>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 mb-1 text-xs">Tipo de Fiação Interna</label>
-                  <select name="tipoFioInterno" value={formData.tipoFioInterno} onChange={handleChange} className="w-full p-2 border border-zinc-200 rounded-lg text-xs">
-                    <option>Não blindado</option>
-                    <option>Blindado</option>
-                    <option>Blindagem pesada</option>
-                  </select>
-                </div>
               </div>
             </div>
           )}
 
           {step === 4 && (
-            <div className="space-y-4">
-              <h2 className="text-xl font-bold text-zinc-900 mb-6">Ocupação e Uso</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 mb-1">Nº Médio de Pessoas</label>
-                  <input type="number" name="numPessoas" value={formData.numPessoas} onChange={handleChange} className="w-full p-2 border border-zinc-200 rounded-lg" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 mb-1">Tempo de Permanência (h/dia)</label>
-                  <input type="number" name="tempoPermanencia" value={formData.tempoPermanencia} onChange={handleChange} className="w-full p-2 border border-zinc-200 rounded-lg" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Tipo de Atividade</label>
-                <select name="tipoAtividade" value={formData.tipoAtividade} onChange={handleChange} className="w-full p-2 border border-zinc-200 rounded-lg">
-                  <option>Residencial</option>
-                  <option>Comercial</option>
-                  <option>Industrial</option>
-                  <option>Hospitalar</option>
-                  <option>Escolar</option>
-                  <option>Teatro/Cinema</option>
-                  <option>Museu</option>
-                  <option>Local de Reunião</option>
-                </select>
-              </div>
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-zinc-700 mb-1">Medidas de Proteção Contra Choque</label>
-                <select name="medidasProtecaoContato" value={formData.medidasProtecaoContato} onChange={handleChange} className="w-full p-2 border border-zinc-200 rounded-lg">
-                  <option>Nenhuma</option>
-                  <option>Avisos</option>
-                  <option>Isolamento</option>
-                  <option>Barreiras</option>
-                </select>
+            <div className="space-y-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-zinc-900">Zonas de Risco</h2>
+                <button 
+                  type="button"
+                  onClick={handleAddZone}
+                  className="flex items-center gap-2 bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-700 transition-colors"
+                >
+                  <Plus size={14} />
+                  Adicionar Zona
+                </button>
               </div>
 
-              <div className="pt-4 border-t border-zinc-100">
-                <h3 className="text-sm font-bold text-zinc-700 mb-3 flex items-center gap-2">
-                  <Info size={16} className="text-emerald-600" />
-                  Valores Econômicos (Para Risco R4)
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Valor da Estrutura (R$)</label>
-                    <input type="number" name="valorEstrutura" value={formData.valorEstrutura} onChange={handleChange} className="w-full p-2 border border-zinc-200 rounded-lg text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Valor do Conteúdo (R$)</label>
-                    <input type="number" name="valorConteudo" value={formData.valorConteudo} onChange={handleChange} className="w-full p-2 border border-zinc-200 rounded-lg text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Valor dos Sistemas (R$)</label>
-                    <input type="number" name="valorSistemas" value={formData.valorSistemas} onChange={handleChange} className="w-full p-2 border border-zinc-200 rounded-lg text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Valor da Atividade (R$)</label>
-                    <input type="number" name="valorAtividade" value={formData.valorAtividade} onChange={handleChange} className="w-full p-2 border border-zinc-200 rounded-lg text-sm" />
-                  </div>
-                </div>
-                <p className="text-[10px] text-zinc-400 mt-2 italic">
-                  Estes valores são utilizados para calcular o risco de perda econômica (R4). Se não informados, serão usados valores padrão.
-                </p>
+              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                {formData.zonas.map((zona) => (
+                  <button
+                    key={zona.id}
+                    type="button"
+                    onClick={() => setSelectedZoneId(zona.id)}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
+                      selectedZoneId === zona.id 
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-100' 
+                        : 'bg-white text-zinc-600 border-zinc-200 hover:border-emerald-200'
+                    }`}
+                  >
+                    {zona.nome}
+                  </button>
+                ))}
               </div>
+
+              {selectedZoneId && formData.zonas.find(z => z.id === selectedZoneId) && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-zinc-50 p-6 rounded-2xl border border-zinc-100 space-y-6"
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Nome da Zona</label>
+                      <input 
+                        type="text" 
+                        name="nome" 
+                        value={formData.zonas.find(z => z.id === selectedZoneId)?.nome} 
+                        onChange={(e) => handleZoneChange(selectedZoneId, e)}
+                        className="bg-transparent border-b border-zinc-200 focus:border-emerald-500 outline-none font-bold text-lg w-full"
+                      />
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={() => handleRemoveZone(selectedZoneId)}
+                      className="text-zinc-400 hover:text-red-600 p-2 transition-colors"
+                      title="Remover Zona"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Ocupação e Atividade</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-zinc-500 mb-1">Nº Pessoas</label>
+                          <input 
+                            type="number" 
+                            name="numPessoas" 
+                            value={formData.zonas.find(z => z.id === selectedZoneId)?.numPessoas} 
+                            onChange={(e) => handleZoneChange(selectedZoneId, e)}
+                            className="w-full p-2 bg-white border border-zinc-200 rounded-lg text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-zinc-500 mb-1">Tempo (h/dia)</label>
+                          <input 
+                            type="number" 
+                            name="tempoPermanencia" 
+                            value={formData.zonas.find(z => z.id === selectedZoneId)?.tempoPermanencia} 
+                            onChange={(e) => handleZoneChange(selectedZoneId, e)}
+                            className="w-full p-2 bg-white border border-zinc-200 rounded-lg text-sm"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-zinc-500 mb-1">Tipo de Atividade</label>
+                        <select 
+                          name="tipoAtividade" 
+                          value={formData.zonas.find(z => z.id === selectedZoneId)?.tipoAtividade} 
+                          onChange={(e) => handleZoneChange(selectedZoneId, e)}
+                          className="w-full p-2 bg-white border border-zinc-200 rounded-lg text-sm"
+                        >
+                          <option>Residencial</option>
+                          <option>Comercial</option>
+                          <option>Industrial</option>
+                          <option>Hospitalar</option>
+                          <option>Escolar</option>
+                          <option>Teatro/Cinema</option>
+                          <option>Museu</option>
+                          <option>Local de Reunião</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Proteção e Risco</h3>
+                      <div>
+                        <label className="block text-[10px] font-bold text-zinc-500 mb-1">Risco de Incêndio</label>
+                        <select 
+                          name="riscoIncendio" 
+                          value={formData.zonas.find(z => z.id === selectedZoneId)?.riscoIncendio} 
+                          onChange={(e) => handleZoneChange(selectedZoneId, e)}
+                          className="w-full p-2 bg-white border border-zinc-200 rounded-lg text-sm"
+                        >
+                          <option>Baixo</option>
+                          <option>Ordinário</option>
+                          <option>Alto</option>
+                          <option>Explosão</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-zinc-500 mb-1">Medidas de Combate</label>
+                        <select 
+                          name="medidasCombateIncendio" 
+                          value={formData.zonas.find(z => z.id === selectedZoneId)?.medidasCombateIncendio} 
+                          onChange={(e) => handleZoneChange(selectedZoneId, e)}
+                          className="w-full p-2 bg-white border border-zinc-200 rounded-lg text-sm"
+                        >
+                          <option>Nenhuma</option>
+                          <option>Extintores</option>
+                          <option>Hidrantes</option>
+                          <option>Automático</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-zinc-200">
+                    <div className="space-y-4">
+                      <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Sistemas Internos</h3>
+                      <div className="grid grid-cols-1 gap-2">
+                        <label className="flex items-center gap-2 p-2 bg-white border border-zinc-200 rounded-lg cursor-pointer">
+                          <input 
+                            type="checkbox" 
+                            name="sistemasMetalicos" 
+                            checked={formData.zonas.find(z => z.id === selectedZoneId)?.sistemasMetalicos} 
+                            onChange={(e) => handleZoneChange(selectedZoneId, e)}
+                          />
+                          <span className="text-[10px] font-bold text-zinc-600 uppercase">DPS Instalado</span>
+                        </label>
+                        <label className="flex items-center gap-2 p-2 bg-white border border-zinc-200 rounded-lg cursor-pointer">
+                          <input 
+                            type="checkbox" 
+                            name="blindagemEspacial" 
+                            checked={formData.zonas.find(z => z.id === selectedZoneId)?.blindagemEspacial} 
+                            onChange={(e) => handleZoneChange(selectedZoneId, e)}
+                          />
+                          <span className="text-[10px] font-bold text-zinc-600 uppercase">Blindagem (Gaiola)</span>
+                        </label>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-zinc-500 mb-1">Fiação Interna</label>
+                        <select 
+                          name="tipoFioInterno" 
+                          value={formData.zonas.find(z => z.id === selectedZoneId)?.tipoFioInterno} 
+                          onChange={(e) => handleZoneChange(selectedZoneId, e)}
+                          className="w-full p-2 bg-white border border-zinc-200 rounded-lg text-sm"
+                        >
+                          <option>Não blindado</option>
+                          <option>Blindado</option>
+                          <option>Blindagem pesada</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Valores Econômicos (Zona)</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-zinc-500 mb-1">Conteúdo (R$)</label>
+                          <input 
+                            type="number" 
+                            name="valorConteudo" 
+                            value={formData.zonas.find(z => z.id === selectedZoneId)?.valorConteudo} 
+                            onChange={(e) => handleZoneChange(selectedZoneId, e)}
+                            className="w-full p-2 bg-white border border-zinc-200 rounded-lg text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-zinc-500 mb-1">Sistemas (R$)</label>
+                          <input 
+                            type="number" 
+                            name="valorSistemas" 
+                            value={formData.zonas.find(z => z.id === selectedZoneId)?.valorSistemas} 
+                            onChange={(e) => handleZoneChange(selectedZoneId, e)}
+                            className="w-full p-2 bg-white border border-zinc-200 rounded-lg text-sm"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-zinc-500 mb-1">Atividade (R$)</label>
+                        <input 
+                          type="number" 
+                          name="valorAtividade" 
+                          value={formData.zonas.find(z => z.id === selectedZoneId)?.valorAtividade} 
+                          onChange={(e) => handleZoneChange(selectedZoneId, e)}
+                          className="w-full p-2 bg-white border border-zinc-200 rounded-lg text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {!selectedZoneId && (
+                <div className="bg-zinc-50 p-12 rounded-2xl border border-dashed border-zinc-200 text-center">
+                  <Layers className="mx-auto text-zinc-300 mb-4" size={48} />
+                  <h3 className="text-zinc-900 font-bold">Selecione uma zona para editar</h3>
+                  <p className="text-zinc-500 text-xs mt-1">Ou adicione uma nova zona para subdividir sua análise.</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -790,13 +1019,14 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
                     <p className="font-semibold text-zinc-900">{formData.tensaoSuportavel}</p>
                   </div>
                   <div className="col-span-2 pt-2 border-t border-zinc-100">
-                    <p className="text-zinc-400 uppercase text-[10px] font-bold">Valores Econômicos (R$)</p>
-                    <p className="text-[10px] text-zinc-600">
-                      Estrutura: {formData.valorEstrutura?.toLocaleString()} | 
-                      Conteúdo: {formData.valorConteudo?.toLocaleString()} | 
-                      Sistemas: {formData.valorSistemas?.toLocaleString()} | 
-                      Atividade: {formData.valorAtividade?.toLocaleString()}
-                    </p>
+                    <p className="text-zinc-400 uppercase text-[10px] font-bold">Zonas Configuradas ({formData.zonas.length})</p>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {formData.zonas.map(z => (
+                        <span key={z.id} className="bg-zinc-100 text-zinc-600 px-2 py-0.5 rounded text-[10px] font-medium">
+                          {z.nome}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -804,6 +1034,54 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
                 <Info size={20} />
                 <p>Ao clicar em calcular, o sistema processará os riscos R1, R2, R3 e R4 conforme a norma.</p>
               </div>
+
+              <AnimatePresence>
+                {showZoneConfirm && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+                  >
+                    <motion.div 
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.9, opacity: 0 }}
+                      className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl text-center"
+                    >
+                      <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <Layers size={40} />
+                      </div>
+                      <h3 className="text-2xl font-bold text-zinc-900 mb-2">Incluir mais zonas?</h3>
+                      <p className="text-zinc-500 mb-8">
+                        Você configurou <strong>{formData.zonas.length} zona(s)</strong>. 
+                        Deseja adicionar mais alguma zona antes de realizar o cálculo final?
+                      </p>
+                      <div className="grid grid-cols-1 gap-3">
+                        <button 
+                          onClick={() => {
+                            setShowZoneConfirm(false);
+                            setStep(4);
+                          }}
+                          className="w-full py-4 bg-zinc-100 text-zinc-700 font-bold rounded-2xl hover:bg-zinc-200 transition-all flex items-center justify-center gap-2"
+                        >
+                          <Plus size={18} />
+                          Sim, adicionar mais zonas
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setShowZoneConfirm(false);
+                            handleCalculate();
+                          }}
+                          className="w-full py-4 bg-emerald-600 text-white font-bold rounded-2xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200"
+                        >
+                          Não, calcular agora
+                        </button>
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
 
@@ -815,7 +1093,7 @@ const CalculationForm = ({ report, onSave, onCancel }: any) => {
               {step === 1 ? 'Cancelar' : 'Voltar'}
             </button>
             <button 
-              onClick={step === 5 ? handleCalculate : () => setStep(step + 1)}
+              onClick={step === 5 ? () => setShowZoneConfirm(true) : () => setStep(step + 1)}
               className="px-8 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 transition-colors shadow-[0_10px_15px_-3px_rgba(16,185,129,0.2),0_4px_6px_-4px_rgba(16,185,129,0.2)]"
             >
               {step === 5 ? 'Calcular e Salvar' : 'Próximo'}
@@ -1273,7 +1551,7 @@ Número Mínimo de Descidas: ${results.lpsDetails.numDescidasMinimo}
 ` : '';
 
     const text = `
-RELATÓRIO DE GERENCIAMENTO DE RISCO SPDA
+RELATÓRIO DE ANÁLISE DE RISCO SPDA
 Norma: ABNT NBR 5419-2:2026
 Data: ${format(new Date(report.createdAt), 'dd/MM/yyyy HH:mm')}
 
@@ -1469,24 +1747,23 @@ ${conclusion}
               )}
 
               <div className="bg-zinc-50 rounded-xl p-4 space-y-2 text-xs">
-                <h4 className="font-bold text-zinc-900 mb-2">2. Dados da Estrutura</h4>
+                <h4 className="font-bold text-zinc-900 mb-2">2. Dados da Estrutura (Global)</h4>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                   <div className="flex justify-between"><span className="text-zinc-500">Dimensões:</span> <span className="font-semibold text-zinc-900">{report.inputs.comprimento}x{report.inputs.largura}x{report.inputs.altura}m</span></div>
                   <div className="flex justify-between"><span className="text-zinc-500">Material:</span> <span className="font-semibold text-zinc-900">{report.inputs.materialConstrucao}</span></div>
                   <div className="flex justify-between"><span className="text-zinc-500">Cobertura:</span> <span className="font-semibold text-zinc-900">{report.inputs.tipoCobertura}</span></div>
-                  <div className="flex justify-between"><span className="text-zinc-500">Risco Incêndio:</span> <span className="font-semibold text-zinc-900">{report.inputs.riscoIncendio}</span></div>
                   <div className="flex justify-between"><span className="text-zinc-500">Ng:</span> <span className="font-semibold text-zinc-900">{report.inputs.ng}</span></div>
                   <div className="flex justify-between"><span className="text-zinc-500">Solo (Uw):</span> <span className="font-semibold text-zinc-900">{report.inputs.resitividadeSolo}Ωm</span></div>
-                  <div className="flex justify-between"><span className="text-zinc-500">Ocupação:</span> <span className="font-semibold text-zinc-900">{report.inputs.numPessoas}</span></div>
-                  <div className="flex justify-between"><span className="text-zinc-500">DPS:</span> <span className="font-semibold text-zinc-900">{report.inputs.sistemasMetalicos ? 'Sim' : 'Não'}</span></div>
+                  <div className="flex justify-between"><span className="text-zinc-500">Valor Estrutura:</span> <span className="font-semibold text-zinc-900">R$ {report.inputs.valorEstrutura?.toLocaleString()}</span></div>
                 </div>
                 <div className="pt-2 border-t border-zinc-200 mt-2">
-                  <p className="text-[9px] text-zinc-400 uppercase font-bold mb-1">Valores Econômicos (R$)</p>
-                  <div className="grid grid-cols-2 gap-x-4 text-[10px]">
-                    <div className="flex justify-between"><span className="text-zinc-500">Estrutura:</span> <span className="font-semibold">{report.inputs.valorEstrutura?.toLocaleString()}</span></div>
-                    <div className="flex justify-between"><span className="text-zinc-500">Conteúdo:</span> <span className="font-semibold">{report.inputs.valorConteudo?.toLocaleString()}</span></div>
-                    <div className="flex justify-between"><span className="text-zinc-500">Sistemas:</span> <span className="font-semibold">{report.inputs.valorSistemas?.toLocaleString()}</span></div>
-                    <div className="flex justify-between"><span className="text-zinc-500">Atividade:</span> <span className="font-semibold">{report.inputs.valorAtividade?.toLocaleString()}</span></div>
+                  <p className="text-[9px] text-zinc-400 uppercase font-bold mb-1">Zonas Analisadas ({report.inputs.zonas.length})</p>
+                  <div className="flex flex-wrap gap-1">
+                    {report.inputs.zonas.map((z: any) => (
+                      <span key={z.id} className="bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded text-[9px] font-medium">
+                        {z.nome}
+                      </span>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -1494,7 +1771,25 @@ ${conclusion}
           </div>
 
           <div className="space-y-4">
-            <h3 className="font-bold text-zinc-900">3. Riscos Calculados (R) vs Toleráveis (Rt)</h3>
+            {report.results.zoneResults && report.results.zoneResults.length > 1 && (
+              <div className="space-y-4">
+                <h3 className="font-bold text-zinc-900">3. Detalhamento por Zonas</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {report.results.zoneResults.map((zr: any, idx: number) => (
+                    <div key={idx} className="bg-zinc-50 rounded-xl p-4 border border-zinc-100">
+                      <h4 className="text-xs font-bold text-zinc-900 mb-2">{zr.nome}</h4>
+                      <div className="space-y-1 text-[10px]">
+                        <div className="flex justify-between"><span>R1 (Vida):</span> <span className="font-mono">{zr.R1.toExponential(3)}</span></div>
+                        <div className="flex justify-between"><span>R2 (Serviço):</span> <span className="font-mono">{zr.R2.toExponential(3)}</span></div>
+                        <div className="flex justify-between"><span>R3 (Patrimônio):</span> <span className="font-mono">{zr.R3.toExponential(3)}</span></div>
+                        <div className="flex justify-between"><span>R4 (Econômico):</span> <span className="font-mono">{zr.R4.toExponential(3)}</span></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <h3 className="font-bold text-zinc-900">{report.results.zoneResults && report.results.zoneResults.length > 1 ? '4' : '3'}. Riscos Totais (R) vs Toleráveis (Rt)</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left">
                 <thead className="bg-zinc-50 text-zinc-500 uppercase text-[10px] font-bold">
@@ -1532,7 +1827,7 @@ ${conclusion}
         {/* PAGE 2 */}
         <div className="bg-white rounded-2xl shadow-sm border border-zinc-100 p-8 space-y-8 text-zinc-900 pdf-page page-break-before">
           <div className="space-y-4">
-            <h3 className="font-bold text-zinc-900">4. Detalhamento dos Componentes de Risco</h3>
+            <h3 className="font-bold text-zinc-900">{report.results.zoneResults && report.results.zoneResults.length > 1 ? '5' : '4'}. Detalhamento dos Componentes de Risco</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-zinc-50 rounded-xl p-4 overflow-hidden">
                 <h4 className="text-[10px] font-bold text-zinc-400 uppercase mb-3">Descargas Diretas (Estrutura)</h4>
@@ -1734,9 +2029,9 @@ const HelpScreen = ({ onBack }: any) => {
 
       <div className="bg-white rounded-2xl shadow-sm border border-zinc-100 p-8 space-y-8">
         <section>
-          <h2 className="text-xl font-bold text-zinc-900 mb-4">O que é o Gerenciamento de Risco?</h2>
+          <h2 className="text-xl font-bold text-zinc-900 mb-4">O que é a Análise de Risco?</h2>
           <p className="text-zinc-600 leading-relaxed mb-4">
-            O gerenciamento de risco de SPDA, fundamentado na norma ABNT NBR 5419-2:2026, é o processo técnico que avalia a necessidade de instalação de para-raios e determina o nível de proteção adequado. 
+            A análise de risco de SPDA, fundamentada na norma ABNT NBR 5419-2:2026, é o processo técnico que avalia a necessidade de instalação de para-raios e determina o nível de proteção adequado. 
             Esta análise calcula os riscos de perdas de vidas (R1), serviços (R2), patrimônio (R3) e cultural (R4), considerando características da estrutura, localização e estruturas adjacentes.
           </p>
           <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl">
@@ -2024,7 +2319,7 @@ export default function App() {
 
       <footer className="bg-white border-t border-zinc-100 p-6 text-center">
         <p className="text-xs text-zinc-400">
-          © 2026 RiscoPro Gerenciamento de Risco para SPDA | Base Normativa ABNT NBR 5419-2:2026
+          © 2026 RiscoPro Análise de Risco para SPDA | Base Normativa ABNT NBR 5419-2:2026
         </p>
       </footer>
     </div>
